@@ -255,7 +255,30 @@ State ui(State state, bool &validation)
                 if (view_day.tm_mon != view_month.tm_mon)
                     break;
                 
-                cout << setw(2) << view_day.tm_mday++ << " TS ";
+                bool treatment = true, consultation = true;
+                
+                if (schedule.find(tt) != schedule.end()) {
+                    auto &day = schedule[tt];
+                    
+                    consultation = day.any();
+                    
+                    for (int i = 0; i < EXPERTS.size(); i++) {
+                        bool b = false;
+                        
+                        for (int j = 0; j < WORK_HOURS; j++) {
+                            if (b && day[i * WORK_HOURS + j]) {
+                                treatment = true;
+                                goto END;
+                            }
+                            
+                            b = day[i * WORK_HOURS + j];
+                        }
+                    }
+                    
+                    END:
+                }
+                
+                cout << setw(2) << view_day.tm_mday++ << ' ' << treatment ? 'T' : ' ' << consultation ? 'C' : ' ' << ' ';
                 
                 if (view_day.tm_wday == 6)
                     cout << endl;
