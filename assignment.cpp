@@ -128,6 +128,20 @@ const array EXPERTS = {
     Staff { "Wai Chee Han", "wch", "12345678" },
 };
 
+constexpr const string *find_longest_expert_name() {
+    const string *p = nullptr;
+    
+    for (const auto &s : EXPERTS) {
+        if (p == nullptr || s.name.size() > p->size()) {
+            p = &s.name;
+        }
+    }
+    
+    return p;
+}
+
+const auto LONGEST_EXPERT_NAME_LENGTH = find_longest_expert_name()->size();
+
 const Staff ADMIN = { "Administrator", "admin", "12345678" };
 const auto WORK_HOURS = 6;
 const auto OPENING_HOUR = 12;
@@ -193,7 +207,7 @@ void reset_day(struct tm &t) {
 }
 
 bool try_book_treatment(time_t t, int hour, int expert) {
-    return (schedule.find(t) == schedule.end()) || !(schedule[t][expert * WORK_HOURS + hour] && schedule[t][expert * WORK_HOURS + hour + 1]);
+    return (schedule.find(t) == schedule.end()) || !(schedule[t][expert * WORK_HOURS + hour] || schedule[t][expert * WORK_HOURS + hour + 1]);
 }
 
 bool try_book_consultation(time_t t, int hour, int expert) {
@@ -229,7 +243,6 @@ bool check_day_treatment_availability(time_t t) {
 bool check_day_consultation_availability(time_t t) {
     return schedule.find(t) == schedule.end() || !schedule[t].all();
 }
-
 
 
 void calendar() {
@@ -270,6 +283,36 @@ void calendar() {
     
     if (view_day.tm_wday != 0)
         cout << endl;
+}
+
+void print_day_schedule(struct tm &date) {
+    const string LABEL = "Experts";
+    const auto COLUMN_SIZE = max(LABEL.size(), LONGEST_EXPERT_NAME_LENGTH);
+    
+    time_t t = mktime(&date);
+    
+    cout << "Schedule for " << format_date(date) << endl << endl;
+    cout << setfill(' ') << setw(COLUMN_SIZE) << LABEL;
+    
+    for (int i = 0; i < WORK_HOURS; i++) {
+        cout << '|' << 12 + i << ":00";
+    }
+    
+    cout << endl;
+    
+    for (int i = 0; i < EXPERTS.size(); i++) {
+        cout << setfill('-') << setw(COLUMN_SIZE) << '-';
+        
+        for (int j = 0; j < WORK_HOURS; j++)
+            cout << '+' << setw(5) << '-';
+        
+        cout << endl << setfill(' ') << setw(COLUMN_SIZE) << EXPERTS[i].name;
+        
+        for (int j = 0; j < WORK_HOURS; j++)
+            cout << "|  " << (schedule.find(t) == schedule.end() || !schedule[t][i * WORK_HOURS + j] ? "✓" : "✗") << "  ";
+        
+        cout << endl;
+    }
 }
 
 State ui(State state, bool &validation)
@@ -452,6 +495,8 @@ State ui(State state, bool &validation)
         
     case BOOK_TREATMENT:
     {
+        print_day_schedule(book_time);
+        
         cout << endl << "Select a time to book" << endl;
         
         if (!validation)
@@ -488,6 +533,8 @@ State ui(State state, bool &validation)
     
     case BOOK_CONSULTATION:
     {
+        print_day_schedule(book_time);
+        
         cout << endl << "Select a time to book" << endl;
         
         if (!validation)
