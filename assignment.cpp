@@ -82,6 +82,20 @@ enum State {
     BOOK_VIEW,
     BOOK_VIEW_PREV_MONTH,
     BOOK_VIEW_NEXT_MONTH,
+    BOOK_SELECT_DAY,
+    BOOK_SELECT_SERVICE_TYPE,
+    BOOK_TREATMENT,
+    BOOK_CONSULTATION,
+    BOOK_SELECT_EXPERT,
+    BOOK_SELECT_SERVICE,
+    BOOK_SELECT_SERVICE_1,
+    BOOK_SELECT_SERVICE_2,
+    BOOK_SELECT_SERVICE_3,
+    BOOK_CONFIRM,
+    BOOK_PAYMENT,
+    BOOK_SUCCESS,
+    BOOK_CANCEL,
+    APPOINTMENTS,
     LOGIN,
     STAFF_MENU,
     LOGOUT,
@@ -116,10 +130,26 @@ const array EXPERTS = {
 
 const Staff ADMIN = { "Administrator", "admin", "12345678" };
 const auto WORK_HOURS = 6;
+const auto OPENING_HOUR = 12;
+
+typedef struct Booking {
+    bool is_treatment;
+    int service;
+    int expert;
+    struct tm time;
+} Booking;
 
 static unordered_map<time_t, bitset<WORK_HOURS * EXPERTS.size()>> schedule = {};
+static unordered_map<string, Booking> bookings = {};
 static const Staff *login_user = nullptr;
 static struct tm view_month;
+static struct tm book_time;
+static time_t book_day;
+static bool is_booking_treatment;
+static int selected_hour = -1;
+static int selected_expert = -1;
+static int selected_service = -1;
+static int new_booking_id = 100;
 
 typedef vector<tuple<char, string, State>> Options;
 
@@ -130,16 +160,123 @@ typedef vector<tuple<char, string, State>> Options;
 
 void line() { cout << setw(20) << setfill('-') << '-' << endl; }
 
-void time_now(struct tm *tm) {
+void time_now(struct tm &tm) {
     auto t = time(nullptr);
-    *tm = *localtime(&t);
+    tm = *localtime(&t);
+}
+
+static array<char, 128> format_string = {};
+
+#define define_format(name, format) const char *name(const struct tm &t) { \
+    strftime(format_string.data(), format_string.size(), format, &t); \
+    return format_string.data(); \
+}
+
+define_format(format_time, "%A %e %B %G (%F) %T");
+define_format(format_date, "%A %e %B %G (%F)");
+
+string format_duration() {
+    auto s = string(format_time(book_time));
+    auto t = book_time;
+    
+    t.tm_hour += is_booking_treatment ? 2 : 1;
+    mktime(&t);
+    strftime(format_string.data(), format_string.size(), "~%T", &t);
+    
+    return s + format_string.data();
+}
+
+void reset_day(struct tm &t) {
+    t.tm_hour = 0;
+    t.tm_min = 0;
+    t.tm_sec = 0;
+}
+
+bool try_book_treatment(time_t t, int hour, int expert) {
+    return (schedule.find(t) == schedule.end()) || !(schedule[t][expert * WORK_HOURS + hour] && schedule[t][expert * WORK_HOURS + hour + 1]);
+}
+
+bool try_book_consultation(time_t t, int hour, int expert) {
+    return (schedule.find(t) == schedule.end()) || !schedule[t][expert * WORK_HOURS + hour];
+}
+
+bool check_hour_treatment_availability(time_t t, int hour) {
+    for (int i = 0; i < EXPERTS.size(); i++)
+        if (try_book_treatment(t, hour, i))
+            return true;
+    
+    return false;
+}
+
+bool check_hour_consultation_availability(time_t t, int hour) {
+    for (int i = 0; i < EXPERTS.size(); i++)
+        if (try_book_consultation(t, hour, i))
+            return true;
+    
+    return false;
+}
+
+bool check_day_treatment_availability(time_t t) {
+    for (int i = 0; i < WORK_HOURS - 1; i++) {
+        if (check_hour_treatment_availability(t, i)) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+bool check_day_consultation_availability(time_t t) {
+    return schedule.find(t) == schedule.end() || !schedule[t].all();
+}
+
+
+
+void calendar() {
+    const int CELL_WIDTH = 6;
+    const int LINE_WIDTH = CELL_WIDTH * WEEKDAY_NAMES.size();
+    const int MY_LEN = 3 + 4 + 1;
+    const int LEFT_PADDING = (LINE_WIDTH  - MY_LEN) / 2;
+    const int RIGHT_PADDING = LINE_WIDTH - MY_LEN - LEFT_PADDING;
+    
+    cout << setw(LEFT_PADDING) << setfill(' ') << ' ' << MONTH_NAMES[view_month.tm_mon] << " " << view_month.tm_year + 1900 << setw(RIGHT_PADDING) << ' ' << endl;
+    
+    for (const auto &weekday : WEEKDAY_NAMES) {
+        cout << left << setw(CELL_WIDTH) << weekday;
+    }
+    
+    cout << endl;
+    
+    auto view_day = view_month;
+    view_day.tm_mday = 1;
+    reset_day(view_day);
+    
+    time_t t = mktime(&view_day);
+    
+    if (view_day.tm_wday > 0)
+        cout << setw(view_day.tm_wday * CELL_WIDTH) << ' ';
+    
+    while (true) {
+        t = mktime(&view_day);
+        
+        if (view_day.tm_mon != view_month.tm_mon)
+            break;
+        
+        cout << setw(2) << view_day.tm_mday++ << ' ' << (check_day_treatment_availability(t) ? 'T' : ' ') << (check_day_consultation_availability(t) ? 'C' : ' ') << ' ';
+        
+        if (view_day.tm_wday == 6)
+            cout << endl;
+    }
+    
+    if (view_day.tm_wday != 0)
+        cout << endl;
 }
 
 State ui(State state, bool &validation)
 {
-    struct tm t;
+    struct tm now;
     
-    time_now(&t);
+    time_now(now);
     
     const Options *options = nullptr;
     
@@ -147,63 +284,66 @@ State ui(State state, bool &validation)
     
     cout << "COMPANY LOGO" << endl;
     line();
-    cout << asctime(&t);
+    cout << format_time(now) << endl;
     line();
     
     switch (state)
     {
-        opts(MENU, (
-            {'1', "About us", ABOUT_US},
-            {'2', "I'm a customer", CUSTOMER},
-            {'3', "I'm a staff", STAFF},
-            {'4', "Exit", EXIT},
-        ))
+    opts(MENU, (
+        {'1', "About us", ABOUT_US},
+        {'2', "I'm a customer", CUSTOMER},
+        {'3', "I'm a staff", STAFF},
+        {'4', "Exit", EXIT},
+    ))
         cout << "Main Menu" << endl;
         break;
         
         
-        opts(ABOUT_US, ({'m', "Return to main menu", MENU}))
+    opts(ABOUT_US, ({'m', "Return to main menu", MENU}))
         cout << "About Us" << endl;
         break;
         
         
-        opts(CUSTOMER, (
-            {'s', "View a list of available services", SERVICE_LIST},
-            {'e', "View a list of available experts", EXPERT_LIST},
-            {'b', "Book service", BOOKING},
-            {'m', "Return to main menu", MENU},
-        ))
+    opts(CUSTOMER, (
+        {'s', "View a list of available services", SERVICE_LIST},
+        {'e', "View a list of available experts", EXPERT_LIST},
+        {'b', "Book service", BOOKING},
+        {'v', "View appointments", APPOINTMENTS},
+        {'m', "Return to main menu", MENU},
+    ))
         cout << "Customer services" << endl;
         line();
         break;
         
         
-        opts(SERVICE_LIST, (
-            {'1', SERVICES[0].name, SERVICE_1},
-            {'2', SERVICES[1].name, SERVICE_2},
-            {'3', SERVICES[2].name, SERVICE_3},
-            {'x', "Cancel", CUSTOMER},
-        ))
+    opts(SERVICE_LIST, (
+        {'1', SERVICES[0].name, SERVICE_1},
+        {'2', SERVICES[1].name, SERVICE_2},
+        {'3', SERVICES[2].name, SERVICE_3},
+        {'x', "Cancel", CUSTOMER},
+    ))
+        selected_service = -1;
         cout << "Available services" << endl;
         line();
         break;
         
         
-        #define service(service_name, index) opts(service_name, ({'b', "Book now", BOOKING}, {'s', "Go back to service list", SERVICE_LIST})) \
-            cout << SERVICES[index].name << " Service" << endl; \
-            line(); \
-            cout << SERVICES[index].description << endl; \
-            break;
+    #define service(service_name, index) opts(service_name, ({'b', "Book now", BOOKING}, {'s', "Go back to service list", SERVICE_LIST})) \
+        selected_service = index; \
+        cout << SERVICES[index].name << " Service" << endl; \
+        line(); \
+        cout << SERVICES[index].description << endl; \
+        break;
+    
+    service(SERVICE_1, 0)
+    service(SERVICE_2, 1)
+    service(SERVICE_3, 2)
         
-        service(SERVICE_1, 0)
-        service(SERVICE_2, 1)
-        service(SERVICE_3, 2)
         
-        
-        opts(EXPERT_LIST, (
-            {'b', "Book an appointment with our experts", BOOKING},
-            {'x', "Go back", CUSTOMER},
-        ))
+    opts(EXPERT_LIST, (
+        {'b', "Book an appointment with our experts", BOOKING},
+        {'x', "Go back", CUSTOMER},
+    ))
         cout << "Our experts:" << endl;
         
         for (const auto &expert : EXPERTS) {
@@ -212,122 +352,337 @@ State ui(State state, bool &validation)
         break;
         
         
-        case BOOKING:
-        view_month = t;
+    case BOOKING:
+        view_month = now;
+        view_month.tm_mday = 1;
+        reset_day(view_month);
         return BOOK_VIEW;
         
         
-        opts(BOOK_VIEW, (
-            {'a', "Previous month", BOOK_VIEW_PREV_MONTH},
-            {'d', "Next month", BOOK_VIEW_NEXT_MONTH},
-            {'x', "Cancel", CUSTOMER},
-        ))
-        
-        {
-            const int CELL_WIDTH = 6;
-            const int LINE_WIDTH = CELL_WIDTH * WEEKDAY_NAMES.size();
-            const int MY_LEN = 3 + 4 + 1;
-            const int LEFT_PADDING = (LINE_WIDTH  - MY_LEN) / 2;
-            const int RIGHT_PADDING = LINE_WIDTH - MY_LEN - LEFT_PADDING;
-            
-            cout << setw(LEFT_PADDING) << setfill(' ') << ' ' << MONTH_NAMES[view_month.tm_mon] << " " << view_month.tm_year + 1900 << setw(RIGHT_PADDING) << ' ' << endl;
-            
-            for (const auto &weekday : WEEKDAY_NAMES) {
-                cout << left << setw(CELL_WIDTH) << weekday;
-            }
-            
-            cout << endl;
-            
-            struct tm view_day = view_month;
-            view_day.tm_hour = 0;
-            view_day.tm_min = 0;
-            view_day.tm_sec = 0;
-            view_day.tm_mday = 1;
-            
-            time_t tt = mktime(&view_day);
-            
-            if (view_day.tm_wday > 0)
-                cout << setw(view_day.tm_wday * CELL_WIDTH) << ' ';
-            
-            while (true) {
-                tt = mktime(&view_day);
-                
-                if (view_day.tm_mon != view_month.tm_mon)
-                    break;
-                
-                bool treatment = true, consultation = true;
-                
-                if (schedule.find(tt) != schedule.end()) {
-                    auto &day = schedule[tt];
-                    
-                    consultation = day.any();
-                    
-                    for (int i = 0; i < EXPERTS.size(); i++) {
-                        bool b = false;
-                        
-                        for (int j = 0; j < WORK_HOURS; j++) {
-                            if (b && day[i * WORK_HOURS + j]) {
-                                treatment = true;
-                                goto END;
-                            }
-                            
-                            b = day[i * WORK_HOURS + j];
-                        }
-                    }
-                    
-                    END:
-                }
-                
-                cout << setw(2) << view_day.tm_mday++ << ' ' << treatment ? 'T' : ' ' << consultation ? 'C' : ' ' << ' ';
-                
-                if (view_day.tm_wday == 6)
-                    cout << endl;
-            }
-            
-            if (view_day.tm_wday != 0)
-                cout << endl;
-        }
-        
+    opts(BOOK_VIEW, (
+        {'a', "Previous month", BOOK_VIEW_PREV_MONTH},
+        {'d', "Next month", BOOK_VIEW_NEXT_MONTH},
+        {'b', "Book a day", BOOK_SELECT_DAY},
+        {'x', "Cancel", CUSTOMER},
+    ))
+        calendar();
         break;
         
         
-        case BOOK_VIEW_PREV_MONTH:
+    case BOOK_VIEW_PREV_MONTH:
         {
-            struct tm _t = t;
+            auto this_month = now;
             
-            _t.tm_mday = 1;
-            _t.tm_hour = 0;
-            _t.tm_min = 0;
-            _t.tm_sec = 0;
+            this_month.tm_mday = 1;
+            reset_day(this_month);
             
-            struct tm vm = view_month;
+            auto prev_month = view_month;
             
-            vm.tm_mon -= 1;
-            vm.tm_mday = 1;
-            vm.tm_hour = 0;
-            vm.tm_min = 0;
-            vm.tm_sec = 0;
+            prev_month.tm_mon -= 1;
             
-            if (mktime(&vm) >= mktime(&_t))
-                view_month = vm;
+            if (mktime(&prev_month) >= mktime(&this_month))
+                view_month = prev_month;
         }
         return BOOK_VIEW;
         
         
-        case BOOK_VIEW_NEXT_MONTH:
+    case BOOK_VIEW_NEXT_MONTH:
         view_month.tm_mon += 1;
         mktime(&view_month);
         return BOOK_VIEW;
         
         
-        opts(STAFF, (
-            {'l', "Login as staff", LOGIN},
-            {'m', "Return to main menu", MENU},
-        ))
+    case BOOK_SELECT_DAY:
+        {
+            string input;
+            
+            calendar();
+            
+            if (!validation)
+                cout << endl << "Please input a future day in the month that is available for booking!" << endl;
+            
+            cout << endl << "Enter the day to book (x to cancel): ";
+            
+            cin >> input;
+            
+            if (input == "x")
+                return BOOK_CANCEL;
+            
+            try {
+                unsigned int day = stoi(input);
+                
+                if (day < 32) {
+                    book_time = view_month;
+                    book_time.tm_mday = day;
+                    book_day = mktime(&book_time);
+                    
+                    bool consultation = check_day_consultation_availability(book_day);
+                    bool treatment = check_day_treatment_availability(book_day);
+                    
+                    auto today = now;
+                    
+                    reset_day(today);
+                    
+                    if (book_day >= mktime(&today) && (consultation || treatment)) {
+                        if (consultation && treatment)
+                            return BOOK_SELECT_SERVICE_TYPE;
+                        else {
+                            is_booking_treatment = treatment;
+                            return treatment ? BOOK_TREATMENT : BOOK_CONSULTATION;
+                        }
+                    }
+                }
+            }
+            catch (invalid_argument e) {}
+            catch (out_of_range e) {}
+            
+            validation = false;
+            return BOOK_SELECT_DAY;
+        }
+    
+    
+    opts(BOOK_SELECT_SERVICE_TYPE, (
+        {'t', "Book treatment", BOOK_TREATMENT},
+        {'c', "Book consultation", BOOK_CONSULTATION},
+        {'x', "Cancel", BOOK_CANCEL},
+    ))
+        cout << "Booking " << format_date(book_time) << endl;
         break;
         
         
-        opts(LOGIN, ({'m', "Return to main menu", MENU}))
+    case BOOK_TREATMENT:
+    {
+        cout << endl << "Select a time to book" << endl;
+        
+        if (!validation)
+            cout << endl << "Invalid input!" << endl;
+        
+        validation = true;
+        
+        cout << endl;
+        
+        for (int i = 0; i < WORK_HOURS - 1; i++)
+            if (check_hour_treatment_availability(book_day, i))
+                cout << static_cast<char>('1' + i) << ": " << OPENING_HOUR + i << ":00~" << OPENING_HOUR + i + 2 << ":00" << endl;
+        
+        cout << "x: Cancel" << endl;
+        
+        char c = input();
+        
+        if (c == 'x')
+            return BOOK_CANCEL;
+        
+        for (int i = 0; i < WORK_HOURS - 1; i++)
+            if (c == '1' + i && check_hour_treatment_availability(book_day, i)) {
+                is_booking_treatment = true;
+                book_time.tm_hour = OPENING_HOUR + i;
+                selected_hour = i;
+                return BOOK_SELECT_EXPERT;
+            }
+        
+        validation = false;
+        
+        return BOOK_TREATMENT;
+    }
+    
+    
+    case BOOK_CONSULTATION:
+    {
+        cout << endl << "Select a time to book" << endl;
+        
+        if (!validation)
+            cout << endl << "Invalid input!" << endl;
+        
+        validation = true;
+        
+        cout << endl;
+        
+        for (int i = 0; i < WORK_HOURS; i++)
+            if (check_hour_consultation_availability(book_day, i))
+                cout << static_cast<char>('1' + i) << ": " << OPENING_HOUR + i << ":00~" << OPENING_HOUR + i + 1 << ":00" << endl;
+        
+        cout << "x: Cancel" << endl;
+        
+        char c = input();
+        
+        if (c == 'x')
+            return BOOK_CANCEL;
+        
+        for (int i = 0; i < WORK_HOURS; i++)
+            if (c == '1' + i && check_hour_consultation_availability(book_day, i)) {
+                is_booking_treatment = false;
+                book_time.tm_hour = OPENING_HOUR + i;
+                selected_hour = i;
+                return BOOK_SELECT_EXPERT;
+            }
+        
+        validation = false;
+        
+        return BOOK_CONSULTATION;
+    }
+    
+    
+    case BOOK_SELECT_EXPERT:
+    {
+        cout << endl << "Select an expert to book" << endl;
+        
+        if (!validation)
+            cout << endl << "Invalid input!" << endl;
+        
+        validation = true;
+        
+        cout << endl;
+        
+        for (int i = 0; i < EXPERTS.size(); i++)
+            if (is_booking_treatment ? try_book_treatment(book_day, selected_hour, i) : try_book_consultation(book_day, selected_hour, i))
+                cout << static_cast<char>('1' + i) << ": Expert " << EXPERTS[i].name << endl;
+        
+        cout << "x: Cancel" << endl;
+        
+        char c = input();
+        
+        if (c == 'x')
+            return BOOK_CANCEL;
+        
+        for (int i = 0; i < EXPERTS.size(); i++)
+            if (c == '1' + i && (is_booking_treatment ? try_book_treatment(book_day, selected_hour, i) : try_book_consultation(book_day, selected_hour, i))) {
+                selected_expert = i;
+                return BOOK_SELECT_SERVICE;
+            }
+            
+        
+        validation = false;
+        
+        return BOOK_SELECT_EXPERT;
+    }
+    
+    
+    opts(BOOK_SELECT_SERVICE, (
+        {'1', "Service " + SERVICES[0].name, BOOK_SELECT_SERVICE_1},
+        {'2', "Service " + SERVICES[1].name, BOOK_SELECT_SERVICE_2},
+        {'3', "Service " + SERVICES[2].name, BOOK_SELECT_SERVICE_3},
+        {'x', "Cancel", BOOK_CANCEL},
+    ))
+        if (selected_service != -1)
+            return BOOK_CONFIRM;
+        
+        cout << "Booking a " << (is_booking_treatment ? "consultation" : "treatment") << " on " << format_duration() << endl;
+        break;
+        
+        
+    case BOOK_SELECT_SERVICE_1:
+        selected_service = 0;
+        return BOOK_CONFIRM;
+        
+        
+    case BOOK_SELECT_SERVICE_2:
+        selected_service = 1;
+        return BOOK_CONFIRM;
+        
+        
+    case BOOK_SELECT_SERVICE_3:
+        selected_service = 2;
+        return BOOK_CONFIRM;
+        
+        
+    opts(BOOK_CONFIRM, (
+        {'y', "Yes, I am sure that the booking information is indeed what I wanted", BOOK_PAYMENT},
+        {'n', "No, there are mistakes in the booking information", BOOK_CANCEL},
+    ))
+        cout << "Please confirm that the following information are correct" << endl;
+        cout << (is_booking_treatment ? "Treatment" : "Consultation") << " during " << format_duration() << endl;
+        cout << "Expert: " << EXPERTS[selected_expert].name << endl;
+        cout << "Service: " << SERVICES[selected_service].name << endl;
+        cout << SERVICES[selected_service].description << endl;
+        cout << endl << "Fee: RM 100" << endl;
+        break;
+    
+    
+    opts(BOOK_PAYMENT, (
+        {'c', "Credit card", BOOK_SUCCESS},
+        {'e', "EWallet", BOOK_SUCCESS},
+        {'b', "Online banking", BOOK_SUCCESS},
+    ))
+        cout << "Select your payment option" << endl;
+        break;
+    
+    
+    opts(BOOK_SUCCESS, ({'m', "Return to menu", CUSTOMER}))
+    {
+        string id = "B";
+        
+        id += to_string(new_booking_id);
+        
+        bookings.insert({id, {
+            .is_treatment = is_booking_treatment,
+            .service = selected_service,
+            .expert = selected_expert,
+            .time = book_time,
+        }});
+        
+        if (schedule.find(book_day) == schedule.end())
+            schedule.insert({book_day, {}});
+        
+        for (int i = 0; i < (is_booking_treatment ? 2 : 1); i++)
+            schedule[book_day][selected_expert * WORK_HOURS + selected_hour + i] = true;
+        
+        cout << "Successfully booked the appointment!" << endl;
+        cout << endl << "Appointment id: B" << new_booking_id++ << endl;
+        cout << (is_booking_treatment ? "Treatment" : "Consultation") << " during " << format_duration() << endl;
+        cout << "Expert: " << EXPERTS[selected_expert].name << endl;
+        cout << "Service: " << SERVICES[selected_service].name << endl;
+        cout << SERVICES[selected_service].description << endl;
+        break;
+    }
+    
+    
+    case BOOK_CANCEL:
+        selected_hour = -1;
+        selected_service = -1;
+        selected_expert = -1;
+        return BOOK_VIEW;
+    
+    
+    opts(APPOINTMENTS, (
+        {'v', "View another appointment", APPOINTMENTS},
+        {'m', "Return to menu", CUSTOMER},
+    ))
+    {
+        string id;
+        
+        cout << "Please enter the appointment id: ";
+        cin >> id;
+        cout << endl;
+        
+        if (bookings.find(id) != bookings.end()) {
+            const auto &appointment = bookings[id];
+            
+            book_time = appointment.time;
+            is_booking_treatment = appointment.is_treatment;
+            
+            cout << "Your appointment is a " << SERVICES[appointment.service].name << " " << (is_booking_treatment ? "treatment" : "consultation") << " during " << format_duration() << endl;
+            cout << "Expert in charge: " << EXPERTS[appointment.expert].name << endl;
+            cout << "Service description: " << SERVICES[appointment.service].description << endl;
+        }
+        else {
+            cout << "Invalid id" << endl;
+        }
+        
+        break;
+    }
+    
+        
+    opts(STAFF, (
+        {'l', "Login as staff", LOGIN},
+        {'m', "Return to main menu", MENU},
+    ))
+        break;
+        
+        
+    opts(LOGIN, (
+        {'r', "Retry", LOGIN},
+        {'m', "Return to main menu", MENU},
+    ))
         
         {
             string username, password;
@@ -361,34 +716,34 @@ State ui(State state, bool &validation)
         break;
         
         
-        opts(STAFF_MENU, (
-            {'1', "View treatment schedule", TREATMENT_SCHEDULE},
-            {'2', "View consultation schedule", CONSULTATION_SCHEDULE},
-            {'3', "View customers", CUSTOMER_DETAILS},
-            {'4', "View sales report", SALES_REPORT},
-            {'5', "Log out", LOGOUT},
-        ))
+    opts(STAFF_MENU, (
+        {'1', "View treatment schedule", TREATMENT_SCHEDULE},
+        {'2', "View consultation schedule", CONSULTATION_SCHEDULE},
+        {'3', "View customers", CUSTOMER_DETAILS},
+        {'4', "View sales report", SALES_REPORT},
+        {'5', "Log out", LOGOUT},
+    ))
         cout << "Staff menu" << endl;
         cout << "Currently login as " << login_user->username << " (" << login_user->name << ")" << endl;
         break;
         
         
-        wip(TREATMENT_SCHEDULE)
+    wip(TREATMENT_SCHEDULE)
         
         
-        wip(CONSULTATION_SCHEDULE)
+    wip(CONSULTATION_SCHEDULE)
         
         
-        wip(CUSTOMER_DETAILS)
+    wip(CUSTOMER_DETAILS)
         
         
-        wip(SALES_REPORT)
+    wip(SALES_REPORT)
         
         
-        opts(LOGOUT, (
-            {'l', "Log in", LOGIN},
-            {'m', "Return to main menu", MENU},
-        ))
+    opts(LOGOUT, (
+        {'l', "Log in", LOGIN},
+        {'m', "Return to main menu", MENU},
+    ))
         login_user = nullptr;
         cout << "Successfully logged out!" << endl;
         break;
