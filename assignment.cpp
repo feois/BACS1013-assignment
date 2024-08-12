@@ -42,7 +42,7 @@ void clear() {
 
 #endif
 
-const array MONTH_NAMES = {
+constexpr array MONTH_NAMES = {
     "Jan",
     "Feb",
     "Mar",
@@ -57,7 +57,7 @@ const array MONTH_NAMES = {
     "Dec",
 };
 
-const array WEEKDAY_NAMES = {
+constexpr array WEEKDAY_NAMES = {
     "Sun",
     "Mon",
     "Tue",
@@ -105,7 +105,7 @@ enum State {
     SALES_REPORT,
 };
 
-typedef struct Service {
+typedef struct {
     string name;
     string description;
 } Service;
@@ -116,7 +116,7 @@ const Service SERVICES[] = {
     {"Hair Coloring", "foo bar baz"},
 };
 
-typedef struct Staff {
+typedef struct {
     string name;
     string username;
     string password;
@@ -128,7 +128,7 @@ const array EXPERTS = {
     Staff { "Wai Chee Han", "wch", "12345678" },
 };
 
-constexpr const string *find_longest_expert_name() {
+const string *find_longest_expert_name() {
     const string *p = nullptr;
     
     for (const auto &s : EXPERTS) {
@@ -143,10 +143,10 @@ constexpr const string *find_longest_expert_name() {
 const auto LONGEST_EXPERT_NAME_LENGTH = find_longest_expert_name()->size();
 
 const Staff ADMIN = { "Administrator", "admin", "12345678" };
-const auto WORK_HOURS = 6;
-const auto OPENING_HOUR = 12;
+constexpr auto WORK_HOURS = 6;
+constexpr auto OPENING_HOUR = 12;
 
-typedef struct Booking {
+typedef struct {
     bool is_treatment;
     int service;
     int expert;
@@ -246,11 +246,11 @@ bool check_day_consultation_availability(time_t t) {
 
 
 void calendar() {
-    const int CELL_WIDTH = 6;
-    const int LINE_WIDTH = CELL_WIDTH * WEEKDAY_NAMES.size();
-    const int MY_LEN = 3 + 4 + 1;
-    const int LEFT_PADDING = (LINE_WIDTH  - MY_LEN) / 2;
-    const int RIGHT_PADDING = LINE_WIDTH - MY_LEN - LEFT_PADDING;
+    constexpr int CELL_WIDTH = 6;
+    constexpr int LINE_WIDTH = CELL_WIDTH * WEEKDAY_NAMES.size();
+    constexpr int MY_LEN = 3 + 4 + 1;
+    constexpr int LEFT_PADDING = (LINE_WIDTH  - MY_LEN) / 2;
+    constexpr int RIGHT_PADDING = LINE_WIDTH - MY_LEN - LEFT_PADDING;
     
     cout << setw(LEFT_PADDING) << setfill(' ') << ' ' << MONTH_NAMES[view_month.tm_mon] << " " << view_month.tm_year + 1900 << setw(RIGHT_PADDING) << ' ' << endl;
     
