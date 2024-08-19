@@ -104,6 +104,10 @@ enum State {
     CUSTOMER_VIEW_PREV_PAGE,
     CUSTOMER_VIEW_NEXT_PAGE,
     SALES_REPORT,
+    SALES_REPORT_CUSTOMER_SUMMARY,
+    SALES_REPORT_EXPERT_SUMMARY,
+    SALES_REPORT_FINANCE_SUMMARY,
+    INVALID_USER,
 };
 
 enum ServiceType : bool {
@@ -438,6 +442,7 @@ State ui(const State state, bool &validation)
     {
         #define opts(name, init) case name: static_Vec_init(concat(name, _OPTS), Option, init); options = concat(name, _OPTS);
         #define wip(name) opts(name, ({'e', "Exit", EXIT})) cout << "WIP" << endl; break;
+        #define OPT_MAIN_MENU(menu) {'m', "Return to main menu", menu}
         #define custom_input(opt_count, cancel_state, opt_check, opt_description, opt_match) \
             { \
                 if (!validation) \
@@ -480,7 +485,7 @@ State ui(const State state, bool &validation)
             break;
             
             
-        opts(ABOUT_US, ({'m', "Return to main menu", MENU}))
+        opts(ABOUT_US, (OPT_MAIN_MENU(MENU)))
             cout << "About Us" << endl;
             break;
             
@@ -490,7 +495,7 @@ State ui(const State state, bool &validation)
             {'e', "View a list of available experts", EXPERT_LIST},
             {'b', "Book service", BOOKING},
             {'v', "View appointments", APPOINTMENTS},
-            {'m', "Return to main menu", MENU},
+            OPT_MAIN_MENU(MENU),
         ))
             cout << "Customer services" << endl;
             line();
@@ -527,7 +532,7 @@ State ui(const State state, bool &validation)
             
         opts(EXPERT_LIST, (
             {'b', "Book an appointment with our experts", BOOKING},
-            {'r', "Go back", CUSTOMER},
+            {'c', "Go back", CUSTOMER},
         ))
             cout << "Our experts:" << endl;
             
@@ -579,6 +584,7 @@ State ui(const State state, bool &validation)
             
         case BOOK_VIEW_NEXT_MONTH:
             view_time.tm_mon += 1;
+            mktime(&view_time);
             redirect(BOOK_VIEW)
             
             
@@ -777,7 +783,7 @@ State ui(const State state, bool &validation)
             break;
         
         
-        opts(BOOK_SUCCESS, ({'m', "Return to menu", CUSTOMER}))
+        opts(BOOK_SUCCESS, (OPT_MAIN_MENU(CUSTOMER)))
         {
             string id = "B";
             
@@ -831,7 +837,7 @@ State ui(const State state, bool &validation)
         
         opts(APPOINTMENTS, (
             {'v', "View another appointment", APPOINTMENTS},
-            {'m', "Return to menu", CUSTOMER},
+            {'c', "Go back", CUSTOMER},
         ))
         {
             string id;
@@ -860,14 +866,14 @@ State ui(const State state, bool &validation)
             
         opts(STAFF, (
             {'l', "Login as staff", LOGIN},
-            {'m', "Return to main menu", MENU},
+            OPT_MAIN_MENU(MENU),
         ))
             break;
             
             
         opts(LOGIN, (
             {'r', "Retry", LOGIN},
-            {'m', "Return to main menu", MENU},
+            OPT_MAIN_MENU(MENU),
         ))
             
             {
@@ -942,9 +948,12 @@ State ui(const State state, bool &validation)
         opts(SCHEDULE_VIEW, (
             {'a', "Previous week", SCHEDULE_VIEW_PREV_WEEK},
             {'d', "Next week", SCHEDULE_VIEW_NEXT_WEEK},
-            {'m', "Go back to staff menu", STAFF_MENU},
+            OPT_MAIN_MENU(STAFF_MENU),
         ))
         {
+            if (login_user == &ADMIN)
+                redirect(INVALID_USER)
+            
             view_time.tm_mday -= view_time.tm_wday;
             reset_day(view_time);
             view_time.tm_hour = OPENING_HOUR;
@@ -972,8 +981,6 @@ State ui(const State state, bool &validation)
             }
             
             cout << endl;
-            
-            if (booking.expert != -1) // Admin special case not handled yet
             
             for (int i = 0; i < WORK_HOURS; i++, view_time.tm_hour++) {
                 coutfill('-', LABEL_SIZE);
@@ -1047,7 +1054,7 @@ State ui(const State state, bool &validation)
         opts(CUSTOMER_VIEW, (
             {'a', "Previous page", CUSTOMER_VIEW_PREV_PAGE},
             {'d', "Next page", CUSTOMER_VIEW_NEXT_PAGE},
-            {'m', "Main menu", STAFF_MENU},
+            OPT_MAIN_MENU(STAFF_MENU),
         ))
             if (all_customers.size() > 0) {
                 cout << "Customers (Page " << view_page + 1 << " of " << (all_customers.size() + CUSTOMER_ENTRIES_PER_PAGE - 1) / CUSTOMER_ENTRIES_PER_PAGE << ')' << endl;
@@ -1089,17 +1096,89 @@ State ui(const State state, bool &validation)
             redirect(CUSTOMER_VIEW)
             
             
-        wip(SALES_REPORT)
+        opts(SALES_REPORT, (
+            {'c', "Customer summary", SALES_REPORT_CUSTOMER_SUMMARY},
+            {'e', "Expert summary", SALES_REPORT_EXPERT_SUMMARY},
+            {'f', "Finance summary", SALES_REPORT_FINANCE_SUMMARY},
+        ))
+            cout << "Sales report" << endl;
+            break;
+        
+        
+        opts(SALES_REPORT_CUSTOMER_SUMMARY, (OPT_MAIN_MENU(STAFF_MENU)))
+        {
+            cout << "Sales Report: Customer Summary" << endl;
+            line();
+            
+            if (all_customers.size() > 0) {
+                const Customer *most_appointments = nullptr;
+                const Customer *most_paid = nullptr;
+                
+                for (const auto &p : all_customers) {
+                    const auto &customer = p.second;
+                    
+                    if (most_appointments == nullptr || most_appointments->booking_history.size() < customer.booking_history.size())
+                        most_appointments = &customer;
+                    
+                    if (most_paid == nullptr || most_paid->total_payment < customer.total_payment)
+                        most_paid = &customer;
+                }
+                
+                {
+                    const auto &customer = *most_appointments;
+                    const auto treatment_count = count_if(customer.booking_history.begin(), customer.booking_history.end(), [](const Booking &a) { return a.service_type == TREATMENT; });
+                    const auto consultation_count = customer.booking_history.size() - treatment_count;
+                    
+                    cout << "Customer who booked the highest count of appointments: " << customer.name << endl;
+                    cout << "\tGender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
+                    cout << "\tAppointment count: " << customer.booking_history.size() << endl;
+                    cout << "\tBooked consultation count: " << consultation_count << endl;
+                    cout << "\tBooked treatment count: " << treatment_count << endl;
+                    cout << "\tTotal Payment: " << customer.total_payment << endl;
+                }
+                
+                {
+                    const auto &customer = *most_paid;
+                    const auto treatment_count = count_if(customer.booking_history.begin(), customer.booking_history.end(), [](const Booking &a) { return a.service_type == TREATMENT; });
+                    const auto consultation_count = customer.booking_history.size() - treatment_count;
+                    
+                    cout << "Customer who booked the highest count of appointments: " << customer.name << endl;
+                    cout << "\tGender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
+                    cout << "\tAppointment count: " << customer.booking_history.size() << endl;
+                    cout << "\tBooked consultation count: " << consultation_count << endl;
+                    cout << "\tBooked treatment count: " << treatment_count << endl;
+                    cout << "\tTotal Payment: " << customer.total_payment << endl;
+                }
+            }
+            else
+                cout << "Not enough data" << endl;
+            
+            break;
+        }    
+            
+        
+        
+        opts(SALES_REPORT_EXPERT_SUMMARY, (OPT_MAIN_MENU(STAFF_MENU)))
+            break;
+        
+        
+        opts(SALES_REPORT_FINANCE_SUMMARY, (OPT_MAIN_MENU(STAFF_MENU)))
+            break;
             
             
         opts(LOGOUT, (
             {'l', "Log in", LOGIN},
-            {'m', "Return to main menu", MENU},
+            OPT_MAIN_MENU(MENU),
         ))
             login_user = nullptr;
             cout << "Successfully logged out!" << endl;
             break;
-            
+        
+        
+        opts(INVALID_USER, (OPT_MAIN_MENU(STAFF_MENU)))
+            cout << "Unavailable to this user" << endl;
+            break;
+        
             
         case EXIT:
             cout << "Thank you for using our service" << endl;
