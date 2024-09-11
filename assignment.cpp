@@ -161,6 +161,69 @@ bool operator ==(const ConstStr &x, const ConstStr &y) {
     return x.len == y.len && (x.len == 0 || memcmp(x.str, y.str, x.len) == 0);
 }
 
+struct Time {
+    struct tm t;
+    time_t tt;
+    
+    char hour() const { return t.tm_hour; }
+    short day() const { return t.tm_mday; }
+    char month() const { return t.tm_mon; }
+    short year() const { return t.tm_year + 1900; }
+    char day_of_the_week() const { return t.tm_wday; }
+    time_t time() const { return tt; }
+    
+    Time copy() const {
+        return *this;
+    }
+    
+    Time &set_hour(const unsigned char hour) {
+        t.tm_hour = hour;
+        t.tm_min = 0;
+        t.tm_sec = 0;
+        return *this;
+    }
+    
+    Time &set_day(const signed char day) {
+        t.tm_mday = day;
+        return *this;
+    }
+    
+    Time &set_month(const signed char month) {
+        t.tm_mon = month;
+        return *this;
+    }
+    
+    Time &reset_day_of_week() {
+        t.tm_mday -= t.tm_wday;
+        return *this;
+    }
+    
+    Time &calibrate() {
+        tt = mktime(&t);
+        return *this;
+    }
+    
+    bool operator <(const Time &time) const {
+        return tt < time.tt;
+    }
+    
+    bool operator <=(const Time &time) const {
+        return tt <= time.tt;
+    }
+    
+    bool operator ==(const Time &time) const {
+        return tt == time.tt;
+    }
+    
+    bool operator >(const Time &time) const {
+        return tt > time.tt;
+    }
+    
+    bool operator >=(const Time &time) const {
+        return tt >= time.tt;
+    }
+};
+
 enum State {
     MAIN_MENU,
     
@@ -237,10 +300,15 @@ struct Booking {
     ServiceType service_type;
     int service;
     int expert;
-    struct tm time;
+    Time time;
 };
 
+// bool cmp_booking(const Booking &l, const Booking &r) {
+//     return mktime(&l.time) < mktime(r.time);
+// }
+
 struct CustomerData {
+    
     ArrayList<Booking> booking_history;
     int total_payment;
 };
@@ -314,29 +382,20 @@ constexpr auto WORK_HOURS = 6;
 constexpr auto OPENING_HOUR = 12;
 constexpr auto CUSTOMER_ENTRIES_PER_PAGE = 10;
 
-auto time_now(struct tm &tm) {
-    const auto t = time(nullptr);
-    tm = *localtime(&t);
-    return t;
+void time_now(Time &t) {
+    t.tt = time(nullptr);
+    t.t = *localtime(&t.tt);
 }
 
 static array<char, 128> format_string = {};
 
-#define define_format(name, format) const char *name(const struct tm &t) { \
-    strftime(format_string.data(), format_string.size(), format, &t); \
+#define define_format(name, format) const char *name(const Time &t) { \
+    strftime(format_string.data(), format_string.size(), format, &t.t); \
     return format_string.data(); \
 }
 
 define_format(format_time, "%A %e %B %G (%F) %T");
 define_format(format_date, "%A %e %B %G (%F)");
-
-constexpr struct tm reset_day(const struct tm &t) {
-    auto u = t;
-    u.tm_hour = 0;
-    u.tm_min = 0;
-    u.tm_sec = 0;
-    return u;
-}
 
 void coutfill(char c, size_t n) {
     if (n > 0)
@@ -416,7 +475,6 @@ struct ExpertScheduleMap {
     
     constexpr Map &get_map() { return _map; }
     ExpertScheduleSet operator[](time_t day) { return { (has_key(_map, day) ? &_map[day] : nullptr) }; }
-    constexpr ExpertScheduleSet operator[](const struct tm &t) const { auto u = reset_day(t); return this[mktime(&u)]; }
     
     MapSetter set() { return {*this}; }
 };
@@ -427,7 +485,7 @@ struct Cache {
     map<string, User> customer_database;
     array<map<time_t, string>, EXPERTS.size()> treatment_schedule, consultation_schedule;
     const User *login_user;
-    struct tm view_time;
+    Time view_time;
     time_t book_day;
     ServiceType service_type;
     Booking booking;
@@ -472,10 +530,10 @@ struct Cache {
         return !(has_key(schedule.get_map(), t) && schedule[t].bs->all());
     }
     
-    void print_calendar(time_t today) {
+    void print_calendar(const Time &today) {
         constexpr int CELL_WIDTH = 6;
         
-        center(CELL_WIDTH * WEEKDAY_NAMES.size(), 3 + 4 + 1, [&]() { cout << MONTH_NAMES[view_time.tm_mon] << " " << view_time.tm_year + 1900; });
+        center(CELL_WIDTH * WEEKDAY_NAMES.size(), 3 + 4 + 1, [&]() { cout << MONTH_NAMES[view_time.month()] << " " << view_time.year(); });
         
         cout << endl;
         
@@ -486,40 +544,35 @@ struct Cache {
         
         cout << endl;
         
-        auto view_day = reset_day(view_time);
-        view_day.tm_mday = 1;
+        Time view_day = view_time;
         
-        auto t = mktime(&view_day);
+        if (view_day.day_of_the_week() > 0)
+            coutfill(' ', view_day.day_of_the_week() * CELL_WIDTH);
         
-        if (view_day.tm_wday > 0)
-            coutfill(' ', view_day.tm_wday * CELL_WIDTH);
-        
-        while (view_day.tm_mon == view_time.tm_mon) {
-            cout << setw(2) << view_day.tm_mday++ << ' ';
+        while (view_day.month() == view_time.month()) {
+            cout << setw(2) << view_day.day() << ' ';
             
-            if (t < today)
+            if (view_day < today)
                 cout << "--";
             else
-                cout << (check_day_consultation_availability(t) ? 'C' : '-') << (check_day_treatment_availability(t) ? 'T' : '-');
+                cout << (check_day_consultation_availability(view_day.time()) ? 'C' : '-') << (check_day_treatment_availability(view_day.time()) ? 'T' : '-');
             
             cout << ' ';
             
-            if (view_day.tm_wday == 6)
+            if (view_day.day_of_the_week() == 6)
                 cout << endl;
             
-            t = mktime(&view_day);
+            view_day.set_day(view_day.day() + 1).calibrate();
         }
         
-        if (view_day.tm_wday != 0)
+        if (view_day.day_of_the_week() != 0)
             cout << endl;
     }
 
-    void print_day_schedule(struct tm &date) {
+    void print_day_schedule(const Time &date) {
         constexpr ConstStr LABEL = "Experts";
         constexpr auto COLUMN_SIZE = max(LABEL.len, MAX_EXPERT_NAME_LENGTH);
         constexpr auto CELL_SIZE = 5;
-        
-        const auto t = mktime(&date);
         
         cout << "Schedule for " << format_date(date) << endl << endl;
         cout << setfill(' ') << setw(COLUMN_SIZE) << left << LABEL;
@@ -544,21 +597,18 @@ struct Cache {
             for (int j = 0; j < WORK_HOURS; j++) {
                 cout << '|';
                 
-                center(CELL_SIZE, 1, [&]() { cout << (schedule[t][i][j] ? "✗" : "✓"); });
+                center(CELL_SIZE, 1, [&]() { cout << (schedule[date.time()][i][j] ? "✗" : "✓"); });
             }
             
             cout << endl;
         }
     }
     
-    string format_duration() const {
-        auto s = string(format_time(booking.time));
-        auto t = booking.time;
+    string format_booking_time() const {
+        string s { format_time(booking.time) };
+        const Time end_time = booking.time.copy().set_hour(booking.time.hour() + (service_type == TREATMENT ? 2 : 1));
         
-        t.tm_hour += service_type == TREATMENT ? 2 : 1;
-        mktime(&t);
-        
-        strftime(format_string.data(), format_string.size(), "~%T", &t);
+        strftime(format_string.data(), format_string.size(), "~%T", &end_time.t);
         
         s += format_string.data();
         
@@ -605,7 +655,7 @@ State ui(const State state, bool &validation, Cache &cache)
     #define refresh return state;
     #define redirect(state) return state;
     
-    struct tm now;
+    Time now;
     
     time_now(now);
     
@@ -782,7 +832,7 @@ State ui(const State state, bool &validation, Cache &cache)
             
             
         case BOOKING:
-            cache.view_time = reset_day(now);
+            cache.view_time = now.set_hour(0).set_day(1).calibrate();
             redirect(BOOK_VIEW)
             
             
@@ -793,8 +843,7 @@ State ui(const State state, bool &validation, Cache &cache)
             {"Cancel", CUSTOMER_MENU},
         ))
         {
-            auto today = reset_day(now);
-            cache.print_calendar(mktime(&today));
+            cache.print_calendar(now.set_hour(0).calibrate());
             
             cout << "C means consultation is available to book" << endl;
             cout << "T means treatment is available to book" << endl;
@@ -805,22 +854,16 @@ State ui(const State state, bool &validation, Cache &cache)
             
         case BOOK_VIEW_PREV_MONTH:
             {
-                auto this_month = reset_day(now);
-                this_month.tm_mday = 1;
+                const auto prev_month = cache.view_time.copy().set_month(cache.view_time.month() - 1).calibrate();
                 
-                auto prev_month = cache.view_time;
-                
-                prev_month.tm_mon -= 1;
-                
-                if (mktime(&prev_month) >= mktime(&this_month))
+                if (prev_month >= cache.view_time)
                     cache.view_time = prev_month;
             }
             redirect(BOOK_VIEW)
             
             
         case BOOK_VIEW_NEXT_MONTH:
-            cache.view_time.tm_mon += 1;
-            mktime(&cache.view_time);
+            cache.view_time.set_month(cache.view_time.month() + 1).calibrate();
             redirect(BOOK_VIEW)
             
             
@@ -828,9 +871,9 @@ State ui(const State state, bool &validation, Cache &cache)
             {
                 string input;
                 
-                auto today = reset_day(now);
-
-                cache.print_calendar(mktime(&today));
+                const auto &today = now.set_hour(0).calibrate();
+                
+                cache.print_calendar(today);
                 
                 if (!validation)
                     cout << endl << "Please input a future day in the month that is available for booking!" << endl;
@@ -846,22 +889,16 @@ State ui(const State state, bool &validation, Cache &cache)
                     const unsigned int day = stoi(input);
                     
                     if (day < 32) {
-                        auto selected_day = cache.view_time;
+                        const auto selected_day = cache.view_time.copy().set_day(day).calibrate();
                         
-                        selected_day.tm_mday = day;
-                        
-                        const auto t = mktime(&selected_day);
-                        
-                        if (selected_day.tm_mon == cache.view_time.tm_mon) {
+                        if (selected_day.month() == cache.view_time.month()) {
                             cache.booking.time = selected_day;
-                            cache.book_day = t;
+                            cache.book_day = selected_day.time();
                             
-                            const bool consultation = cache.check_day_consultation_availability(t);
-                            const bool treatment = cache.check_day_treatment_availability(t);
+                            const bool consultation = cache.check_day_consultation_availability(cache.book_day);
+                            const bool treatment = cache.check_day_treatment_availability(cache.book_day);
                             
-                            auto today = reset_day(now);
-                            
-                            if (t >= mktime(&today) && (consultation || treatment)) {
+                            if (selected_day >= today && (consultation || treatment)) {
                                 if (consultation && treatment)
                                     redirect(BOOK_SELECT_SERVICE_TYPE)
                                 else {
@@ -902,7 +939,7 @@ State ui(const State state, bool &validation, Cache &cache)
                 [](size_t i) { cout << OPENING_HOUR + i << ":00~" << OPENING_HOUR + i + 2 << ":00"; },
                 [&](size_t i) {
                     cache.service_type = TREATMENT;
-                    cache.booking.time.tm_hour = OPENING_HOUR + i;
+                    cache.booking.time.set_hour(OPENING_HOUR + i).calibrate();
                     cache.selected_hour = i;
                     redirect(BOOK_SELECT_EXPERT)
                 }
@@ -923,7 +960,7 @@ State ui(const State state, bool &validation, Cache &cache)
                 [](size_t i) { cout << OPENING_HOUR + i << ":00~" << OPENING_HOUR + i + 1 << ":00"; },
                 [&](size_t i) {
                     cache.service_type = CONSULTATION;
-                    cache.booking.time.tm_hour = OPENING_HOUR + i;
+                    cache.booking.time.set_hour(OPENING_HOUR + i).calibrate();
                     cache.selected_hour = i;
                     redirect(BOOK_SELECT_EXPERT)
                 }
@@ -931,7 +968,7 @@ State ui(const State state, bool &validation, Cache &cache)
         
         
         case BOOK_SELECT_EXPERT:
-            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << cache.format_duration() << endl;
+            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << cache.format_booking_time() << endl;
             cout << endl << "Select an expert to book" << endl;
             
             return custom_input(
@@ -952,7 +989,7 @@ State ui(const State state, bool &validation, Cache &cache)
             if (cache.booking.service != -1)
                 redirect(BOOK_CONFIRM)
             
-            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << cache.format_duration() << endl;
+            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << cache.format_booking_time() << endl;
             
             return custom_input(
                 state,
@@ -981,7 +1018,7 @@ State ui(const State state, bool &validation, Cache &cache)
             cout << "Name: " << customer.name << endl;
             cout << "Gender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
             cout << "Contact number: " << customer.phone_number << endl << endl;
-            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << cache.format_duration() << endl;
+            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << cache.format_booking_time() << endl;
             cout << "Expert: " << EXPERTS[cache.booking.expert].name << endl;
             cout << "Service: " << service.name << endl;
             cout << service.description << endl;
@@ -1009,7 +1046,7 @@ State ui(const State state, bool &validation, Cache &cache)
             
             auto &sched = (cache.service_type == TREATMENT ? cache.treatment_schedule : cache.consultation_schedule);
             
-            sched[cache.booking.expert].insert({mktime(&cache.booking.time), id});
+            sched[cache.booking.expert].insert({cache.booking.time.tt, id});
             
             cache.booking.service_type = cache.service_type;
             cache.booking_database.insert({std::move(id), cache.booking});
@@ -1024,7 +1061,7 @@ State ui(const State state, bool &validation, Cache &cache)
             
             cout << "Successfully booked the appointment!" << endl;
             cout << endl << "Appointment id: B" << cache.new_booking_id++ << endl;
-            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << cache.format_duration() << endl;
+            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << cache.format_booking_time() << endl;
             cout << "Expert: " << EXPERTS[cache.booking.expert].name << endl;
             cout << "Service: " << service.name << endl;
             cout << service.description << endl;
@@ -1058,7 +1095,7 @@ State ui(const State state, bool &validation, Cache &cache)
                 cache.booking.time = appointment.time;
                 cache.service_type = appointment.service_type;
                 
-                cout << "Your appointment is a " << SERVICES[appointment.service].name << " " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " during " << cache.format_duration() << endl;
+                cout << "Your appointment is a " << SERVICES[appointment.service].name << " " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " during " << cache.format_booking_time() << endl;
                 cout << "Expert in charge: " << EXPERTS[appointment.expert].name << endl;
                 cout << "Service description: " << SERVICES[appointment.service].description << endl;
             }
@@ -1135,15 +1172,13 @@ State ui(const State state, bool &validation, Cache &cache)
             
         case TREATMENT_SCHEDULE:
             cache.service_type = TREATMENT;
-            cache.view_time = reset_day(now);
-            cache.view_time.tm_mday -= cache.view_time.tm_wday;
+            cache.view_time = now.reset_day_of_week().calibrate();
             redirect(SCHEDULE_VIEW)
             
             
         case CONSULTATION_SCHEDULE:
             cache.service_type = CONSULTATION;
-            cache.view_time = reset_day(now);
-            cache.view_time.tm_mday -= cache.view_time.tm_wday;
+            cache.view_time = now.reset_day_of_week().calibrate();
             redirect(SCHEDULE_VIEW)
             
         
@@ -1156,22 +1191,13 @@ State ui(const State state, bool &validation, Cache &cache)
             if (cache.login_user == &ADMIN)
                 redirect(INVALID_USER)
             
-            cache.view_time.tm_hour = OPENING_HOUR;
-            
             constexpr auto LABEL_SIZE = 5;
             constexpr auto CELL_SIZE = 5;
             constexpr auto LINE_WIDTH = LABEL_SIZE + WEEKDAY_NAMES.size() * (CELL_SIZE + 1);
             constexpr ConstStr SEPARATOR = " ~ ";
             
-            auto we = cache.view_time;
-            
-            we.tm_mday += WEEKDAY_NAMES.size() - 1;
-            
-            mktime(&cache.view_time);
-            mktime(&we);
-            
             const string week_start = format_date(cache.view_time);
-            const string week_end = format_date(we);
+            const string week_end = format_date(cache.view_time.copy().set_day(cache.view_time.day() + 6).calibrate());
             
             center(LINE_WIDTH, week_start.length() + SEPARATOR.len + week_end.length(), [&]() { cout << week_start << SEPARATOR << week_end; });
             
@@ -1185,7 +1211,9 @@ State ui(const State state, bool &validation, Cache &cache)
             
             cout << endl;
             
-            for (int i = 0; i < WORK_HOURS; i++, cache.view_time.tm_hour++) {
+            Time t = cache.view_time.copy().set_hour(OPENING_HOUR).calibrate();
+            
+            for (int i = 0; i < WORK_HOURS; i++, t = cache.view_time.copy().set_hour(OPENING_HOUR + ++i).calibrate()) {
                 coutfill('-', LABEL_SIZE);
                 
                 for (int j = 0; j < WEEKDAY_NAMES.size(); j++) {
@@ -1193,33 +1221,26 @@ State ui(const State state, bool &validation, Cache &cache)
                     coutfill('-', CELL_SIZE);
                 }
                 
-                cout << endl << OPENING_HOUR + i << ":00";
+                cout << endl << t.hour() << ":00";
                 
-                for (int j = 0; j < WEEKDAY_NAMES.size(); j++, cache.view_time.tm_mday++) {
-                    const auto t = mktime(&cache.view_time);
+                for (; t.day_of_the_week() < WEEKDAY_NAMES.size(); t.set_day(t.day() + 1).calibrate()) {
                     const string *id = nullptr;
                     
                     if (cache.service_type == TREATMENT) {
-                        if (has_key(cache.treatment_schedule[cache.booking.expert], t))
-                            id = &cache.treatment_schedule[cache.booking.expert][t];
+                        if (has_key(cache.treatment_schedule[cache.booking.expert], t.time()))
+                            id = &cache.treatment_schedule[cache.booking.expert][t.time()];
                         else if (i > 0) {
-                            auto prev_hour = cache.view_time;
+                            const Time prev_hour = t.copy().set_hour(t.hour() - 1).calibrate();
                             
-                            prev_hour.tm_hour -= 1;
-                            
-                            const auto pt = mktime(&prev_hour);
-                            
-                            if (has_key(cache.treatment_schedule[cache.booking.expert], pt))
-                                id = &cache.treatment_schedule[cache.booking.expert][pt];
+                            if (has_key(cache.treatment_schedule[cache.booking.expert], prev_hour.time()))
+                                id = &cache.treatment_schedule[cache.booking.expert][prev_hour.time()];
                         }
                     }
-                    else if (has_key(cache.consultation_schedule[cache.booking.expert], t))
-                        id = &cache.consultation_schedule[cache.booking.expert][t];
+                    else if (has_key(cache.consultation_schedule[cache.booking.expert], t.time()))
+                        id = &cache.consultation_schedule[cache.booking.expert][t.time()];
                     
                     cout << '|' << (id == nullptr ? "  -  " : *id);
                 }
-                
-                cache.view_time.tm_mday -= WEEKDAY_NAMES.size();
                 
                 cout << endl;
             }
@@ -1230,13 +1251,9 @@ State ui(const State state, bool &validation, Cache &cache)
         
         case SCHEDULE_VIEW_PREV_WEEK:
         {
-            auto this_week = reset_day(now);
-            auto prev_week = cache.view_time;
+            const auto prev_week = cache.view_time.copy().set_day(cache.view_time.day() - 7).calibrate();
             
-            this_week.tm_mday -= this_week.tm_wday;
-            prev_week.tm_mday -= WEEKDAY_NAMES.size();
-            
-            if (mktime(&prev_week) >= mktime(&this_week))
+            if (prev_week >= now.set_hour(0).calibrate())
                 cache.view_time = prev_week;
             
             redirect(SCHEDULE_VIEW)
@@ -1244,8 +1261,7 @@ State ui(const State state, bool &validation, Cache &cache)
         
         
         case SCHEDULE_VIEW_NEXT_WEEK:
-            cache.view_time.tm_mday += WEEKDAY_NAMES.size();
-            mktime(&cache.view_time);
+            cache.view_time.set_day(cache.view_time.day() + 7).calibrate();
             redirect(SCHEDULE_VIEW)
         
             
