@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <cctype>
 #include <ctime>
+#include <cstring>
 #include <array>
 #include <bitset>
 #include <map>
@@ -13,7 +14,7 @@ using namespace std;
 #include <conio.h>
 #include <cstdlib>
 
-char input() {
+char input_key_impl() {
     return getch();
 }
 
@@ -25,7 +26,7 @@ void clear() {
 #include <termios.h>
 #include <unistd.h>
 
-char input() {
+char input_key_impl() {
     struct termios oldattr, newattr;
     tcgetattr( STDIN_FILENO, &oldattr );
     newattr = oldattr;
@@ -42,6 +43,14 @@ void clear() {
 
 #endif
 
+char input_key() {
+    char c;
+    
+    while ((c = input_key_impl()) == '\n');
+    
+    return c;
+}
+
 template<typename T, typename U>
 bool has_key(const unordered_map<T, U> &map, const T &t) {
     return map.find(t) != map.end();
@@ -53,36 +62,19 @@ bool has_key(const map<T, U> &map, const T &t) {
 }
 
 template<typename T>
-struct static_vec {
-    const T *arr;
-    size_t size;
-    
-    constexpr static_vec(): arr(nullptr), size(0) {}
-    constexpr static_vec(initializer_list<T> a): arr(a.begin()), size(a.size()) {}
-    constexpr const T& operator[](size_t i) const { return arr[i]; }
-};
-
-#define static_Vec_init(name, type, init) static constexpr initializer_list<type> concat(_, name) = { unpack init }; static constexpr static_vec<type> name = { concat(_, name) }
-
-struct static_str {
-    const char *str;
-    size_t len;
-    
-    template<size_t N>
-    constexpr static_str(const char (&s)[N]) : str(s), len(N - 1) {}
-};
-
-ostream &operator <<(ostream &os, static_str s) {
-    return os << s.str;
-}
-
-template<typename T>
 struct ArrayList {
     T *array;
     size_t length;
     size_t count;
     
     constexpr ArrayList(): array(nullptr), length(0), count(0) {}
+    
+    ArrayList(const size_t n): array(new T[n]), length(n), count(0) {}
+    
+    ~ArrayList() {
+        if (array != nullptr)
+            delete array;
+    }
     
     void add(T t) {
         if (count + 1 >= length) {
@@ -91,7 +83,7 @@ struct ArrayList {
             
             if (array != nullptr) {
                 for (int i = 0; i < count; i++)
-                    new_array = array[i];
+                    new_array[i] = array[i];
                 
                 delete[] array;
             }
@@ -113,17 +105,76 @@ struct ArrayList {
         
         return n;
     }
+    
+    constexpr T *move_array() {
+        const auto a = array;
+        
+        array = nullptr;
+        
+        return a;
+    }
 };
 
+template<typename T>
+struct ConstVec {
+    const T *arr;
+    size_t size;
+    
+    constexpr ConstVec(): arr(nullptr), size(0) {}
+    constexpr ConstVec(initializer_list<T> a): arr(a.begin()), size(a.size()) {}
+    constexpr ConstVec(ArrayList<T> a): arr(a.move_array()), size(a.count) {}
+    constexpr const T& operator[](size_t i) const { return arr[i]; }
+};
+
+#define concat(x, y) x ## y
+#define unpack(...) __VA_ARGS__
+#define static_Vec_init(name, type, init) static constexpr initializer_list<type> concat(_, name) = { unpack init }; static constexpr ConstVec<type> name = { concat(_, name) }
+
+auto duplicate_str(const char *s, size_t n) {
+    return static_cast<const char *>(memcpy(new char[n], s, n));
+}
+
+struct ConstStr {
+    const char *str;
+    size_t len;
+    
+    constexpr ConstStr() : str(nullptr), len(0) {}
+    
+    template<size_t N>
+    constexpr ConstStr(const char (&s)[N]) : str(s), len(N - 1) {}
+    
+    ConstStr(string s) : str(duplicate_str(s.c_str(), s.length() + 1)), len(s.length()) {}
+};
+
+ostream &operator <<(ostream &os, const ConstStr &s) {
+    return os << s.str;
+}
+
+void operator >>(istream &is, ConstStr &s) {
+    string str;
+    
+    is >> str;
+    s = { std::move(str) };
+}
+
+bool operator ==(const ConstStr &x, const ConstStr &y) {
+    return x.len == y.len && (x.len == 0 || memcmp(x.str, y.str, x.len) == 0);
+}
+
 enum State {
-    MENU,
+    MAIN_MENU,
+    
+    
     ABOUT_US,
-    CUSTOMER,
-    STAFF,
-    EXIT,
+    
+    
+    CUSTOMER_LOGIN,
+    CUSTOMER_MENU,
     SERVICE_LIST,
     VIEW_SERVICE,
     EXPERT_LIST,
+    APPOINTMENTS,
+    
     BOOKING,
     BOOK_VIEW,
     BOOK_VIEW_PREV_MONTH,
@@ -134,15 +185,16 @@ enum State {
     BOOK_CONSULTATION,
     BOOK_SELECT_EXPERT,
     BOOK_SELECT_SERVICE,
-    BOOK_ENTER_DETAILS,
     BOOK_CONFIRM,
     BOOK_PAYMENT,
     BOOK_SUCCESS,
     BOOK_CANCEL,
-    APPOINTMENTS,
-    LOGIN,
+    
+    
+    STAFF_LOGIN,
     STAFF_MENU,
-    LOGOUT,
+    INVALID_USER,
+    
     TREATMENT_SCHEDULE,
     CONSULTATION_SCHEDULE,
     SCHEDULE_VIEW,
@@ -152,11 +204,16 @@ enum State {
     CUSTOMER_VIEW,
     CUSTOMER_VIEW_PREV_PAGE,
     CUSTOMER_VIEW_NEXT_PAGE,
+    
     SALES_REPORT,
     SALES_REPORT_CUSTOMER_SUMMARY,
     SALES_REPORT_EXPERT_SUMMARY,
     SALES_REPORT_FINANCE_SUMMARY,
-    INVALID_USER,
+    
+    
+    LOGOUT,
+    
+    EXIT,
 };
 
 enum ServiceType : bool {
@@ -170,17 +227,10 @@ enum Gender : bool {
 };
 
 struct Service {
-    static_str name;
-    static_str description;
+    ConstStr name;
+    ConstStr description;
     double consultation_fee;
     double treatment_fee;
-};
-
-struct Staff {
-    static_str name;
-    Gender gender;
-    static_str username;
-    static_str password;
 };
 
 struct Booking {
@@ -190,36 +240,24 @@ struct Booking {
     struct tm time;
 };
 
-struct Option {
-    char key;
-    static_str description;
-    State link;
-};
-
-struct Customer {
-    string name;
-    Gender gender;
-    string phone_number;
+struct CustomerData {
     ArrayList<Booking> booking_history;
     int total_payment;
 };
 
-#define unpack(...) __VA_ARGS__
-#define concat(x, y) x ## y
-#define center(qualifier, line_width, string_width, string) \
-    { \
-        qualifier size_t _LINE_WIDTH = line_width; \
-        qualifier size_t _STRING_WIDTH = string_width; \
-        if (_STRING_WIDTH > _LINE_WIDTH) cout << string; \
-        else { \
-            qualifier auto PADDING = _LINE_WIDTH - _STRING_WIDTH; \
-            qualifier auto LEFT_PADDING = PADDING / 2; \
-            qualifier auto RIGHT_PADDING = PADDING - LEFT_PADDING; \
-            coutfill(' ', LEFT_PADDING); \
-            cout << string; \
-            coutfill(' ', RIGHT_PADDING); \
-        } \
-    }
+struct User {
+    ConstStr username;
+    ConstStr password;
+    ConstStr name;
+    Gender gender;
+    ConstStr phone_number;
+    CustomerData *customer_data;
+};
+
+struct Option {
+    ConstStr description;
+    State link;
+};
 
 constexpr array MONTH_NAMES {
     "Jan",
@@ -253,13 +291,13 @@ constexpr array SERVICES {
 };
 
 constexpr array EXPERTS {
-    Staff { "Ang Zi En", MALE, "aze", "12345678" },
-    Staff { "Wilson Ang Shao En", MALE, "wase", "12345678" },
-    Staff { "Wai Chee Han", MALE, "wch", "12345678" },
+    User { "aze", "12345678", "Ang Zi En", FEMALE, "999", nullptr },
+    User { "wch", "12345678" , "Wai Chee Han", MALE, "999", nullptr },
+    User { "wase", "12345678", "Wilson Ang Shao En", MALE, "+6011-7243 3165", nullptr },
 };
 
-constexpr const static_str *find_longest_expert_name() {
-    const static_str *p = nullptr;
+constexpr const ConstStr *find_longest_expert_name() {
+    const ConstStr *p = nullptr;
     
     for (const auto &s : EXPERTS) {
         if (p == nullptr || s.name.len > p->len) {
@@ -271,7 +309,7 @@ constexpr const static_str *find_longest_expert_name() {
 }
 
 constexpr auto MAX_EXPERT_NAME_LENGTH = find_longest_expert_name()->len;
-constexpr Staff ADMIN { "Administrator", MALE, "admin", "12345678" };
+constexpr User ADMIN { "admin", "12345678", "Administrator", MALE, "-", nullptr };
 constexpr auto WORK_HOURS = 6;
 constexpr auto OPENING_HOUR = 12;
 constexpr auto CUSTOMER_ENTRIES_PER_PAGE = 10;
@@ -292,7 +330,7 @@ static array<char, 128> format_string = {};
 define_format(format_time, "%A %e %B %G (%F) %T");
 define_format(format_date, "%A %e %B %G (%F)");
 
-struct tm reset_day(const struct tm &t) {
+constexpr struct tm reset_day(const struct tm &t) {
     auto u = t;
     u.tm_hour = 0;
     u.tm_min = 0;
@@ -305,14 +343,28 @@ void coutfill(char c, size_t n) {
         cout << setfill(c) << setw(n) << c;
 }
 
+template<typename F>
+void center(const size_t line_width, const size_t string_width, F f) {
+    if (string_width > line_width) f();
+    else {
+        const auto padding = line_width - string_width;
+        const auto left = padding / 2;
+        const auto right = padding - left;
+        
+        coutfill(' ', left);
+        f();
+        coutfill(' ', right);
+    }
+}
+
 void line() {
     coutfill('-', 20);
     cout << endl;
 }
 
-bool is_phone_number(const string &s) {
-    for (const char &c : s)
-        if (!isdigit(c))
+constexpr bool is_phone_number(const ConstStr &s) {
+    for (size_t i = 0; i < s.len; i++)
+        if (!isdigit(s.str[i]))
             return false;
     
     return true;
@@ -371,19 +423,18 @@ struct ExpertScheduleMap {
 
 struct Cache {
     ExpertScheduleMap<EXPERTS.size(), WORK_HOURS> schedule;
-    unordered_map<string, Booking> all_bookings;
-    map<string, Customer> all_customers;
+    unordered_map<string, Booking> booking_database;
+    map<string, User> customer_database;
     array<map<time_t, string>, EXPERTS.size()> treatment_schedule, consultation_schedule;
-    const Staff *login_user;
+    const User *login_user;
     struct tm view_time;
     time_t book_day;
     ServiceType service_type;
     Booking booking;
-    Customer customer;
     int selected_hour;
     int new_booking_id;
     int view_page;
-    map<string, Customer>::iterator customer_view;
+    map<string, User>::iterator customer_view;
     
     bool try_book_treatment(const time_t t, const int hour, const int expert) {
         return !(schedule[t][expert][hour] || schedule[t][expert][hour + 1]);
@@ -424,12 +475,12 @@ struct Cache {
     void print_calendar(time_t today) {
         constexpr int CELL_WIDTH = 6;
         
-        center(constexpr, CELL_WIDTH * WEEKDAY_NAMES.size(), 3 + 4 + 1, MONTH_NAMES[view_time.tm_mon] << " " << view_time.tm_year + 1900)
+        center(CELL_WIDTH * WEEKDAY_NAMES.size(), 3 + 4 + 1, [&]() { cout << MONTH_NAMES[view_time.tm_mon] << " " << view_time.tm_year + 1900; });
         
         cout << endl;
         
         for (const auto &weekday : WEEKDAY_NAMES) {
-            center(constexpr, CELL_WIDTH - 1, 3, weekday)
+            center(CELL_WIDTH - 1, 3, [&]() { cout << weekday; });
             cout << ' ';
         }
         
@@ -464,7 +515,7 @@ struct Cache {
     }
 
     void print_day_schedule(struct tm &date) {
-        constexpr static_str LABEL = "Experts";
+        constexpr ConstStr LABEL = "Experts";
         constexpr auto COLUMN_SIZE = max(LABEL.len, MAX_EXPERT_NAME_LENGTH);
         constexpr auto CELL_SIZE = 5;
         
@@ -493,7 +544,7 @@ struct Cache {
             for (int j = 0; j < WORK_HOURS; j++) {
                 cout << '|';
                 
-                center(constexpr, CELL_SIZE, 1, (schedule[t][i][j] ? "✗" : "✓"));
+                center(CELL_SIZE, 1, [&]() { cout << (schedule[t][i][j] ? "✗" : "✓"); });
             }
             
             cout << endl;
@@ -515,6 +566,40 @@ struct Cache {
     }
 };
 
+template<typename F, typename G, typename H>
+State custom_input(const State state, bool &validation, const size_t option_count, const State cancel_state, F checker, G description, H matching) {
+    if (!validation)
+        cout << endl << "Invalid input!" << endl;
+    
+    validation = true;
+    
+    ArrayList<size_t> indexes { option_count };
+    
+    cout << endl << "Please select any of the following options" << endl;
+    
+    for (size_t i = 0; i < option_count; i++)
+        if (checker(i)) {
+            cout << static_cast<char>('1' + indexes.count) << ": ";
+            description(i);
+            cout << endl;
+            indexes.add(i);
+        }
+    
+    cout << static_cast<char>('1' + indexes.count) << ": Cancel" << endl;
+    
+    const char c = input_key() - '1';
+    
+    if (c == indexes.count)
+        return cancel_state;
+    
+    if (c >= 0 && c < option_count) {
+        return matching(indexes.array[c]);
+    }
+    
+    validation = false;
+    return state;
+}
+
 State ui(const State state, bool &validation, Cache &cache)
 {
     #define refresh return state;
@@ -524,7 +609,7 @@ State ui(const State state, bool &validation, Cache &cache)
     
     time_now(now);
     
-    static_vec<Option> options {};
+    ConstVec<Option> options {};
     
     clear();
     
@@ -533,64 +618,115 @@ State ui(const State state, bool &validation, Cache &cache)
     cout << format_time(now) << endl;
     line();
     
+    if (cache.login_user != nullptr) {
+        cout << "Currently login as " << cache.login_user->username << " (" << cache.login_user->name << ")" << endl;
+        line();
+    }
+    
     switch (state)
     {
         #define opts(name, init) case name: static_Vec_init(concat(name, _OPTS), Option, init); options = concat(name, _OPTS);
-        #define wip(name) opts(name, ({'e', "Exit", EXIT})) cout << "WIP" << endl; break;
-        #define OPT_MAIN_MENU(menu) {'m', "Return to main menu", menu}
-        #define custom_input(opt_count, cancel_state, opt_check, opt_description, opt_match) \
-            { \
-                if (!validation) \
-                    cout << endl << "Invalid input!" << endl; \
-                \
-                validation = true; \
-                \
-                constexpr int count = opt_count; \
-                \
-                cout << endl << "Please select any of the following options" << endl; \
-                \
-                for (int i = 0; i < count; i++) \
-                    if (opt_check) \
-                        cout << static_cast<char>('1' + i) << ": " << opt_description << endl; \
-                \
-                cout << "x: Cancel" << endl; \
-                \
-                const char c = input(); \
-                \
-                if (c == 'x') \
-                    return cancel_state; \
-                \
-                for (int i = 0; i < count; i++) \
-                    if (c == '1' + i && (opt_check)) { \
-                        unpack opt_match \
-                    } \
-                \
-                validation = false; \
-                refresh \
-            }
+        #define wip(name) opts(name, ({"Exit", EXIT})) cout << "WIP" << endl; break;
+        #define OPT_MAIN_MENU(menu) {"Return to main menu", menu}
             
             
-        opts(MENU, (
-            {'1', "About us", ABOUT_US},
-            {'2', "I'm a customer", CUSTOMER},
-            {'3', "I'm a staff", STAFF},
-            {'4', "Exit", EXIT},
+        opts(MAIN_MENU, (
+            {"About us", ABOUT_US},
+            {"I'm a customer", CUSTOMER_LOGIN},
+            {"I'm a staff", STAFF_LOGIN},
+            {"Exit", EXIT},
         ))
             cout << "Main Menu" << endl;
             break;
             
             
-        opts(ABOUT_US, (OPT_MAIN_MENU(MENU)))
+        opts(ABOUT_US, (OPT_MAIN_MENU(MAIN_MENU)))
             cout << "About Us" << endl;
             break;
+        
+        
+        opts(CUSTOMER_LOGIN, ({"Retry", CUSTOMER_LOGIN}, OPT_MAIN_MENU(MAIN_MENU)))
+        {
+            string username;
+            
+            cout << "Login or Register" << endl << endl;
+            cout << "Username: ";
+            
+            cin >> username;
+            
+            if (has_key(cache.customer_database, username)) {
+                ConstStr password;
+                const auto &user = cache.customer_database[username];
+                
+                cout << "Password: ";
+                
+                cin >> password;
+                
+                if (password == user.password) {
+                    cache.login_user = &user;
+                    redirect(CUSTOMER_MENU)
+                }
+                
+                cout << endl << "Wrong password" << endl;
+                break;
+            }
+            else {
+                cout << endl << "This username does not exist. Do you wish to register a new account with this username?" << endl;
+                cout << "Press x to cancel. Press Space to proceed with the registration process. ";
+                
+                char c;
+                
+                while ((c = input_key()) != ' ')
+                    if (c == 'x')
+                        redirect(MAIN_MENU)
+                
+                User user;
+                
+                cout << endl << endl << "Enter your name: ";
+                cin >> user.name;
+                cout << "Enter your gender (M/F): ";
+                
+                while (true) {
+                    const char c = input_key();
+                    
+                    if (c == 'm') {
+                        user.gender = MALE;
+                        cout << "Male";
+                        break;
+                    }
+                    if (c == 'f') {
+                        user.gender = FEMALE;
+                        cout << "Female";
+                        break;
+                    }
+                }
+                
+                cout << endl << "Enter your phone number (numbers only): ";
+                cin >> user.phone_number;
+                
+                if (user.phone_number.len > 11 || !is_phone_number(user.phone_number)) {
+                    cout << endl << "Invalid input" << endl;
+                    break;
+                }
+                
+                cout << "Enter your password: ";
+                cin >> user.password;
+                
+                user.username = { username };
+                user.customer_data = new CustomerData;
+                cache.login_user = &cache.customer_database.insert({std::move(username), user}).first->second;
+                
+                redirect(CUSTOMER_MENU)
+            }
+        }
             
             
-        opts(CUSTOMER, (
-            {'s', "View a list of available services", SERVICE_LIST},
-            {'e', "View a list of available experts", EXPERT_LIST},
-            {'b', "Book service", BOOKING},
-            {'v', "View appointments", APPOINTMENTS},
-            OPT_MAIN_MENU(MENU),
+        opts(CUSTOMER_MENU, (
+            {"View a list of available services", SERVICE_LIST},
+            {"View a list of available experts", EXPERT_LIST},
+            {"Book service", BOOKING},
+            {"View appointments", APPOINTMENTS},
+            {"Log out", LOGOUT},
         ))
             cout << "Customer services" << endl;
             line();
@@ -603,21 +739,23 @@ State ui(const State state, bool &validation, Cache &cache)
             
             cache.booking.service = -1;
             
-            custom_input(
+            return custom_input(
+                state,
+                validation,
                 SERVICES.size(),
-                CUSTOMER,
-                true,
-                SERVICES[i].name,
-                ({
+                CUSTOMER_MENU,
+                [](size_t) { return true; },
+                [](size_t i) { cout << SERVICES[i].name; },
+                [&](size_t i) {
                     cache.booking.service = i;
                     redirect(VIEW_SERVICE)
-                })
-            )
+                }
+            );
             
             
         opts(VIEW_SERVICE, (
-            {'b', "Book now", BOOKING},
-            {'s', "Go back to service list", SERVICE_LIST},
+            {"Book now", BOOKING},
+            {"Go back to service list", SERVICE_LIST},
         ))
         {
             const auto &service = SERVICES[cache.booking.service];
@@ -631,8 +769,8 @@ State ui(const State state, bool &validation, Cache &cache)
             
             
         opts(EXPERT_LIST, (
-            {'b', "Book an appointment with our experts", BOOKING},
-            {'c', "Go back", CUSTOMER},
+            {"Book an appointment with our experts", BOOKING},
+            {"Go back", CUSTOMER_MENU},
         ))
             cout << "Our experts:" << endl;
             
@@ -649,10 +787,10 @@ State ui(const State state, bool &validation, Cache &cache)
             
             
         opts(BOOK_VIEW, (
-            {'a', "Previous month", BOOK_VIEW_PREV_MONTH},
-            {'d', "Next month", BOOK_VIEW_NEXT_MONTH},
-            {'b', "Book a day", BOOK_SELECT_DAY},
-            {'x', "Cancel", CUSTOMER},
+            {"Previous month", BOOK_VIEW_PREV_MONTH},
+            {"Next month", BOOK_VIEW_NEXT_MONTH},
+            {"Book a day", BOOK_SELECT_DAY},
+            {"Cancel", CUSTOMER_MENU},
         ))
         {
             auto today = reset_day(now);
@@ -742,9 +880,9 @@ State ui(const State state, bool &validation, Cache &cache)
         
         
         opts(BOOK_SELECT_SERVICE_TYPE, (
-            {'t', "Book treatment", BOOK_TREATMENT},
-            {'c', "Book consultation", BOOK_CONSULTATION},
-            {'x', "Cancel", BOOK_CANCEL},
+            {"Book treatment", BOOK_TREATMENT},
+            {"Book consultation", BOOK_CONSULTATION},
+            {"Cancel", BOOK_CANCEL},
         ))
             cout << "Booking " << format_date(cache.booking.time) << endl;
             break;
@@ -755,18 +893,20 @@ State ui(const State state, bool &validation, Cache &cache)
             
             cout << endl << "Select a time to book" << endl;
             
-            custom_input(
+            return custom_input(
+                state,
+                validation,
                 WORK_HOURS - 1,
                 BOOK_CANCEL,
-                cache.check_hour_treatment_availability(cache.book_day, i),
-                OPENING_HOUR + i << ":00~" << OPENING_HOUR + i + 2 << ":00",
-                ({
+                [&](size_t i) { return cache.check_hour_treatment_availability(cache.book_day, i); },
+                [](size_t i) { cout << OPENING_HOUR + i << ":00~" << OPENING_HOUR + i + 2 << ":00"; },
+                [&](size_t i) {
                     cache.service_type = TREATMENT;
                     cache.booking.time.tm_hour = OPENING_HOUR + i;
                     cache.selected_hour = i;
                     redirect(BOOK_SELECT_EXPERT)
-                })
-            )
+                }
+            );
         
         
         case BOOK_CONSULTATION:
@@ -774,102 +914,73 @@ State ui(const State state, bool &validation, Cache &cache)
             
             cout << endl << "Select a time to book" << endl;
             
-            custom_input(
+            return custom_input(
+                state,
+                validation,
                 WORK_HOURS,
                 BOOK_CANCEL,
-                cache.check_hour_consultation_availability(cache.book_day, i),
-                OPENING_HOUR + i << ":00~" << OPENING_HOUR + i + 1 << ":00",
-                ({
+                [&](size_t i) { return cache.check_hour_consultation_availability(cache.book_day, i); },
+                [](size_t i) { cout << OPENING_HOUR + i << ":00~" << OPENING_HOUR + i + 1 << ":00"; },
+                [&](size_t i) {
                     cache.service_type = CONSULTATION;
                     cache.booking.time.tm_hour = OPENING_HOUR + i;
                     cache.selected_hour = i;
                     redirect(BOOK_SELECT_EXPERT)
-                })
-            )
+                }
+            );
         
         
         case BOOK_SELECT_EXPERT:
             cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << cache.format_duration() << endl;
             cout << endl << "Select an expert to book" << endl;
             
-            custom_input(
+            return custom_input(
+                state,
+                validation,
                 EXPERTS.size(),
                 BOOK_CANCEL,
-                cache.service_type == TREATMENT ? cache.try_book_treatment(cache.book_day, cache.selected_hour, i) : cache.try_book_consultation(cache.book_day, cache.selected_hour, i),
-                "Expert " << EXPERTS[i].name,
-                ({
+                [&](size_t i) { return cache.service_type == TREATMENT ? cache.try_book_treatment(cache.book_day, cache.selected_hour, i) : cache.try_book_consultation(cache.book_day, cache.selected_hour, i); },
+                [](size_t i) { cout << "Expert " << EXPERTS[i].name; },
+                [&](size_t i) {
                     cache.booking.expert = i;
                     redirect(BOOK_SELECT_SERVICE)
-                })
-            )
+                }
+            );
         
         
         case BOOK_SELECT_SERVICE:
             if (cache.booking.service != -1)
-                redirect(BOOK_ENTER_DETAILS)
+                redirect(BOOK_CONFIRM)
             
             cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << cache.format_duration() << endl;
             
-            custom_input(
+            return custom_input(
+                state,
+                validation,
                 SERVICES.size(),
                 BOOK_CANCEL,
-                true,
-                "Service " << SERVICES[i].name,
-                ({
+                [](size_t) { return true; },
+                [](size_t i) { cout << "Service " << SERVICES[i].name; },
+                [&](size_t i) {
                     cache.booking.service = i;
-                    redirect(BOOK_ENTER_DETAILS)
-                })
-            )
-        
-        
-        opts(BOOK_ENTER_DETAILS, ({'r', "Retry", BOOK_ENTER_DETAILS}))
-            cout << "Customer Details" << endl;
-            line();
-            cout << "Enter your name: ";
-            cin >> cache.customer.name;
-            
-            if (!has_key(cache.all_customers, cache.customer.name)) {
-                cout << "Enter your gender (M/F): ";
-                
-                while (true) {
-                    const char c = input();
-                    
-                    if (c == 'm') {
-                        cache.customer.gender = MALE;
-                        cout << "Male";
-                        break;
-                    }
-                    if (c == 'f') {
-                        cache.customer.gender = FEMALE;
-                        cout << "Female";
-                        break;
-                    }
+                    redirect(BOOK_CONFIRM)
                 }
-                
-                cout << endl << "Enter your phone number (numbers only): ";
-                cin >> cache.customer.phone_number;
-                
-                if (cache.customer.phone_number.size() > 11 || !is_phone_number(cache.customer.phone_number)) {
-                    cout << "Invalid input" << endl;
-                    break;
-                }
-            }
-            
-            redirect(BOOK_CONFIRM)
+            );
         
             
         opts(BOOK_CONFIRM, (
-            {'y', "Yes, I am sure that the booking information is indeed what I wanted", BOOK_PAYMENT},
-            {'n', "No, there are mistakes in the booking information", BOOK_CANCEL},
+            {"Yes, I am sure that the booking information is indeed what I wanted", BOOK_PAYMENT},
+            {"No, there are mistakes in the booking information", BOOK_CANCEL},
         ))
         {
             const auto &service = SERVICES[cache.booking.service];
+            const auto &customer = *cache.login_user;
             
             cout << "Please confirm that the following information are correct" << endl;
             line();
-            cout << "Name: " << cache.customer.name << endl;
-            cout << "Gender: " << (cache.customer.gender == MALE ? "Male" : "Female") << endl;
-            cout << "Contact number: " << cache.customer.phone_number << endl << endl;
+            cout << "Name: " << customer.name << endl;
+            cout << "Gender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
+            cout << "Contact number: " << customer.phone_number << endl << endl;
             cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << cache.format_duration() << endl;
             cout << "Expert: " << EXPERTS[cache.booking.expert].name << endl;
             cout << "Service: " << service.name << endl;
@@ -880,15 +991,15 @@ State ui(const State state, bool &validation, Cache &cache)
         
         
         opts(BOOK_PAYMENT, (
-            {'c', "Credit card", BOOK_SUCCESS},
-            {'e', "EWallet", BOOK_SUCCESS},
-            {'b', "Online banking", BOOK_SUCCESS},
+            {"Credit card", BOOK_SUCCESS},
+            {"EWallet", BOOK_SUCCESS},
+            {"Online banking", BOOK_SUCCESS},
         ))
             cout << "Select your payment option" << endl;
             break;
         
         
-        opts(BOOK_SUCCESS, (OPT_MAIN_MENU(CUSTOMER)))
+        opts(BOOK_SUCCESS, (OPT_MAIN_MENU(CUSTOMER_MENU)))
         {
             const auto &service = SERVICES[cache.booking.service];
             
@@ -901,21 +1012,9 @@ State ui(const State state, bool &validation, Cache &cache)
             sched[cache.booking.expert].insert({mktime(&cache.booking.time), id});
             
             cache.booking.service_type = cache.service_type;
-            
-            cache.all_bookings.insert({std::move(id), cache.booking});
-            
-            if (has_key(cache.all_customers, cache.customer.name)) {
-                auto &c = cache.all_customers[cache.customer.name];
-                
-                c.booking_history.add(cache.booking);
-                c.total_payment += cache.service_type == TREATMENT ? service.treatment_fee : service.consultation_fee;
-            }
-            else {
-                cache.customer.booking_history = {};
-                cache.customer.total_payment = 0;
-                
-                cache.all_customers.insert({cache.customer.name, cache.customer});
-            }
+            cache.booking_database.insert({std::move(id), cache.booking});
+            cache.login_user->customer_data->booking_history.add(cache.booking);
+            cache.login_user->customer_data->total_payment += cache.service_type == TREATMENT ? service.treatment_fee : service.consultation_fee;
             
             if (has_key(cache.schedule.get_map(), cache.book_day))
                 cache.schedule.get_map().insert({cache.book_day, {}});
@@ -943,8 +1042,8 @@ State ui(const State state, bool &validation, Cache &cache)
         
         
         opts(APPOINTMENTS, (
-            {'v', "View another appointment", APPOINTMENTS},
-            {'c', "Go back", CUSTOMER},
+            {"View another appointment", APPOINTMENTS},
+            {"Go back", CUSTOMER_MENU},
         ))
         {
             string id;
@@ -953,8 +1052,8 @@ State ui(const State state, bool &validation, Cache &cache)
             cin >> id;
             cout << endl;
             
-            if (has_key(cache.all_bookings, id)) {
-                const auto &appointment = cache.all_bookings[id];
+            if (has_key(cache.booking_database, id)) {
+                const auto &appointment = cache.booking_database[id];
                 
                 cache.booking.time = appointment.time;
                 cache.service_type = appointment.service_type;
@@ -971,45 +1070,40 @@ State ui(const State state, bool &validation, Cache &cache)
         }
         
             
-        opts(STAFF, (
-            {'l', "Login as staff", LOGIN},
-            OPT_MAIN_MENU(MENU),
+        opts(STAFF_LOGIN, (
+            {"Retry", STAFF_LOGIN},
+            OPT_MAIN_MENU(MAIN_MENU),
         ))
-            break;
-            
-            
-        opts(LOGIN, (
-            {'r', "Retry", LOGIN},
-            OPT_MAIN_MENU(MENU),
-        ))
-            
             {
-                string username, password;
+                ConstStr username, password;
                 
+                cout << "Login as staff" << endl << endl;
                 cout << "Username: ";
                 cin >> username;
-                cout << "Password: ";
-                cin >> password;
                 
-                cout << endl;
-                
-                if (username == ADMIN.username.str)
+                if (username == ADMIN.username)
                     cache.login_user = &ADMIN;
                 else {
-                    for (const Staff &expert : EXPERTS) {
-                        if (expert.username.str == username) {
+                    for (const User &expert : EXPERTS) {
+                        if (username == expert.username) {
                             cache.login_user = &expert;
                             break;
                         }
                     }
                 }
                 
-                if (cache.login_user == nullptr)
-                    cout << "Invalid username" << endl;
-                else if (password == cache.login_user->password.str)
+                if (cache.login_user == nullptr) {
+                    cout << endl << "Invalid username" << endl;
+                    break;
+                }
+                
+                cout << "Password: ";
+                cin >> password;
+                
+                if (password == cache.login_user->password)
                     redirect(STAFF_MENU)
                 else
-                    cout << "Invalid password" << endl;
+                    cout << endl << "Invalid password" << endl;
                 
                 cache.login_user = nullptr;
             }
@@ -1018,14 +1112,13 @@ State ui(const State state, bool &validation, Cache &cache)
             
             
         opts(STAFF_MENU, (
-            {'1', "View treatment schedule", TREATMENT_SCHEDULE},
-            {'2', "View consultation schedule", CONSULTATION_SCHEDULE},
-            {'3', "View customers", CUSTOMER_DETAILS},
-            {'4', "View sales report", SALES_REPORT},
-            {'5', "Log out", LOGOUT},
+            {"View treatment schedule", TREATMENT_SCHEDULE},
+            {"View consultation schedule", CONSULTATION_SCHEDULE},
+            {"View customers", CUSTOMER_DETAILS},
+            {"View sales report", SALES_REPORT},
+            {"Log out", LOGOUT},
         ))
             cout << "Staff menu" << endl;
-            cout << "Currently login as " << cache.login_user->username << " (" << cache.login_user->name << ")" << endl;
             
             if (cache.login_user == &ADMIN)
                 cache.booking.expert = -1;
@@ -1055,8 +1148,8 @@ State ui(const State state, bool &validation, Cache &cache)
             
         
         opts(SCHEDULE_VIEW, (
-            {'a', "Previous week", SCHEDULE_VIEW_PREV_WEEK},
-            {'d', "Next week", SCHEDULE_VIEW_NEXT_WEEK},
+            {"Previous week", SCHEDULE_VIEW_PREV_WEEK},
+            {"Next week", SCHEDULE_VIEW_NEXT_WEEK},
             OPT_MAIN_MENU(STAFF_MENU),
         ))
         {
@@ -1068,7 +1161,7 @@ State ui(const State state, bool &validation, Cache &cache)
             constexpr auto LABEL_SIZE = 5;
             constexpr auto CELL_SIZE = 5;
             constexpr auto LINE_WIDTH = LABEL_SIZE + WEEKDAY_NAMES.size() * (CELL_SIZE + 1);
-            constexpr static_str SEPARATOR = " ~ ";
+            constexpr ConstStr SEPARATOR = " ~ ";
             
             auto we = cache.view_time;
             
@@ -1080,14 +1173,14 @@ State ui(const State state, bool &validation, Cache &cache)
             const string week_start = format_date(cache.view_time);
             const string week_end = format_date(we);
             
-            center(const, LINE_WIDTH, week_start.length() + SEPARATOR.len + week_end.length(), week_start << SEPARATOR << week_end)
+            center(LINE_WIDTH, week_start.length() + SEPARATOR.len + week_end.length(), [&]() { cout << week_start << SEPARATOR << week_end; });
             
             cout << endl;
             coutfill(' ', 5);
             
             for (const auto &weekday : WEEKDAY_NAMES) {
                 cout << '|';
-                center(constexpr, 5, 3, weekday);
+                center(5, 3, [&]() { cout << weekday; });
             }
             
             cout << endl;
@@ -1157,24 +1250,24 @@ State ui(const State state, bool &validation, Cache &cache)
         
             
         case CUSTOMER_DETAILS:
-            cache.customer_view = cache.all_customers.begin();
+            cache.customer_view = cache.customer_database.begin();
             redirect(CUSTOMER_VIEW)
         
         
         opts(CUSTOMER_VIEW, (
-            {'a', "Previous page", CUSTOMER_VIEW_PREV_PAGE},
-            {'d', "Next page", CUSTOMER_VIEW_NEXT_PAGE},
+            {"Previous page", CUSTOMER_VIEW_PREV_PAGE},
+            {"Next page", CUSTOMER_VIEW_NEXT_PAGE},
             OPT_MAIN_MENU(STAFF_MENU),
         ))
-            if (cache.all_customers.size() > 0) {
-                cout << "Customers (Page " << cache.view_page + 1 << " of " << (cache.all_customers.size() + CUSTOMER_ENTRIES_PER_PAGE - 1) / CUSTOMER_ENTRIES_PER_PAGE << ')' << endl;
+            if (cache.customer_database.size() > 0) {
+                cout << "Customers (Page " << cache.view_page + 1 << " of " << (cache.customer_database.size() + CUSTOMER_ENTRIES_PER_PAGE - 1) / CUSTOMER_ENTRIES_PER_PAGE << ')' << endl;
                 line();
                 
                 const auto offset = cache.view_page * CUSTOMER_ENTRIES_PER_PAGE;
                 
                 auto view = cache.customer_view;
                 
-                for (auto i = 0; i < CUSTOMER_ENTRIES_PER_PAGE && view != cache.all_customers.end(); i++, view++) {
+                for (auto i = 0; i < CUSTOMER_ENTRIES_PER_PAGE && view != cache.customer_database.end(); i++, view++) {
                     const auto &customer = view->second;
                     
                     cout << offset + i + 1 << ". " << customer.name << " (" << (customer.gender == MALE ? "Male" : "Female") << ") 📞 " << customer.phone_number << endl;
@@ -1197,7 +1290,7 @@ State ui(const State state, bool &validation, Cache &cache)
         
         
         case CUSTOMER_VIEW_NEXT_PAGE:
-            if (cache.view_page + 1 < (cache.all_customers.size() + CUSTOMER_ENTRIES_PER_PAGE - 1) / CUSTOMER_ENTRIES_PER_PAGE) {
+            if (cache.view_page + 1 < (cache.customer_database.size() + CUSTOMER_ENTRIES_PER_PAGE - 1) / CUSTOMER_ENTRIES_PER_PAGE) {
                 cache.view_page++;
                 
                 for (auto i = 0; i < CUSTOMER_ENTRIES_PER_PAGE; i++)
@@ -1207,9 +1300,9 @@ State ui(const State state, bool &validation, Cache &cache)
             
             
         opts(SALES_REPORT, (
-            {'c', "Customer summary", SALES_REPORT_CUSTOMER_SUMMARY},
-            {'e', "Expert summary", SALES_REPORT_EXPERT_SUMMARY},
-            {'f', "Finance summary", SALES_REPORT_FINANCE_SUMMARY},
+            {"Customer summary", SALES_REPORT_CUSTOMER_SUMMARY},
+            {"Expert summary", SALES_REPORT_EXPERT_SUMMARY},
+            {"Finance summary", SALES_REPORT_FINANCE_SUMMARY},
         ))
             cout << "Sales report" << endl;
             break;
@@ -1219,46 +1312,48 @@ State ui(const State state, bool &validation, Cache &cache)
             cout << "Sales Report: Customer Summary" << endl;
             line();
             
-            if (cache.all_customers.size() > 0) {
-                const Customer *most_appointments = nullptr;
-                const Customer *most_paid = nullptr;
+            if (cache.customer_database.size() > 0) {
+                const User *most_appointments = nullptr;
+                const User *most_paid = nullptr;
                 
-                for (const auto &p : cache.all_customers) {
+                for (const auto &p : cache.customer_database) {
                     const auto &customer = p.second;
                     
-                    if (most_appointments == nullptr || most_appointments->booking_history.count < customer.booking_history.count)
+                    if (most_appointments == nullptr || most_appointments->customer_data->booking_history.count < customer.customer_data->booking_history.count)
                         most_appointments = &customer;
                     
-                    if (most_paid == nullptr || most_paid->total_payment < customer.total_payment)
+                    if (most_paid == nullptr || most_paid->customer_data->total_payment < customer.customer_data->total_payment)
                         most_paid = &customer;
                 }
                 
                 {
                     const auto &customer = *most_appointments;
-                    const auto treatment_count = customer.booking_history.count_if([](const Booking &a) { return a.service_type == TREATMENT; });
-                    const auto consultation_count = customer.booking_history.count - treatment_count;
+                    const auto &data = *customer.customer_data;
+                    const auto treatment_count = data.booking_history.count_if([](const Booking &a) { return a.service_type == TREATMENT; });
+                    const auto consultation_count = data.booking_history.count - treatment_count;
                     
                     cout << "Customer who booked the highest count of appointments: " << customer.name << endl;
                     cout << "\tGender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
-                    cout << "\tAppointment count: " << customer.booking_history.count << endl;
+                    cout << "\tAppointment count: " << data.booking_history.count << endl;
                     cout << "\tBooked consultation count: " << consultation_count << endl;
                     cout << "\tBooked treatment count: " << treatment_count << endl;
-                    cout << "\tTotal Payment: " << customer.total_payment << endl;
+                    cout << "\tTotal Payment: " << data.total_payment << endl;
                 }
                 
                 line();
                 
                 {
                     const auto &customer = *most_paid;
-                    const auto treatment_count = customer.booking_history.count_if([](const Booking &a) { return a.service_type == TREATMENT; });
-                    const auto consultation_count = customer.booking_history.count - treatment_count;
+                    const auto &data = *customer.customer_data;
+                    const auto treatment_count = data.booking_history.count_if([](const Booking &a) { return a.service_type == TREATMENT; });
+                    const auto consultation_count = data.booking_history.count - treatment_count;
                     
-                    cout << "Customer who booked the highest count of appointments: " << customer.name << endl;
+                    cout << "Customer who paid most for our services: " << customer.name << endl;
                     cout << "\tGender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
-                    cout << "\tAppointment count: " << customer.booking_history.count << endl;
+                    cout << "\tAppointment count: " << data.booking_history.count << endl;
                     cout << "\tBooked consultation count: " << consultation_count << endl;
                     cout << "\tBooked treatment count: " << treatment_count << endl;
-                    cout << "\tTotal Payment: " << customer.total_payment << endl;
+                    cout << "\tTotal Payment: " << data.total_payment << endl;
                 }
             }
             else
@@ -1270,7 +1365,7 @@ State ui(const State state, bool &validation, Cache &cache)
         
         opts(SALES_REPORT_EXPERT_SUMMARY, (OPT_MAIN_MENU(STAFF_MENU)))
         {
-            constexpr static_str HOURS_WORKED = "Hours Worked", TOTAL_SALES = "Total Sales";
+            constexpr ConstStr HOURS_WORKED = "Hours Worked", TOTAL_SALES = "Total Sales";
             constexpr auto MAX_RECORD_NAME_LEN = max(HOURS_WORKED.len, TOTAL_SALES.len);
             
             coutfill(' ', MAX_RECORD_NAME_LEN);
@@ -1281,19 +1376,16 @@ State ui(const State state, bool &validation, Cache &cache)
         
         opts(SALES_REPORT_FINANCE_SUMMARY, (OPT_MAIN_MENU(STAFF_MENU)))
             break;
-            
-            
-        opts(LOGOUT, (
-            {'l', "Log in", LOGIN},
-            OPT_MAIN_MENU(MENU),
-        ))
-            cache.login_user = nullptr;
-            cout << "Successfully logged out!" << endl;
-            break;
         
         
         opts(INVALID_USER, (OPT_MAIN_MENU(STAFF_MENU)))
             cout << "Unavailable to this user" << endl;
+            break;
+            
+            
+        opts(LOGOUT, (OPT_MAIN_MENU(MAIN_MENU)))
+            cache.login_user = nullptr;
+            cout << "Successfully logged out!" << endl;
             break;
         
             
@@ -1314,24 +1406,27 @@ State ui(const State state, bool &validation, Cache &cache)
     
     validation = true;
     
+    char c;
+    
     if (options.size > 1) {
         cout << "Please select any of the following options" << endl;
         
         for (int i = 0; i < options.size; i++) {
-            cout << options[i].key << ": " << options[i].description << endl;
+            cout << i + 1 << ": " << options[i].description << endl;
         }
+    
+        c = input_key() - '1';
+        
+        if (c >= 0 && c < options.size)
+            redirect(options[c].link)
     }
-    else
-        cout << "Press " << options[0].key << " to " << options[0].description << endl;
-    
-    char c;
-    
-    while ((c = input()) == '\n');
-    
-    for (int i = 0; i < options.size; i++) {
-        if (options[i].key == c) {
-            redirect(options[i].link)
-        }
+    else {
+        cout << "Press Space to " << options[0].description << endl;
+        
+        c = input_key();
+        
+        if (c == ' ')
+            redirect(options[0].link)
     }
     
     validation = false;
@@ -1343,8 +1438,8 @@ int main()
     bool validation = true;
     Cache cache {
         .schedule = {},
-        .all_bookings = {},
-        .all_customers = {},
+        .booking_database = {},
+        .customer_database = {},
         .treatment_schedule = {},
         .consultation_schedule = {},
         .login_user = nullptr,
@@ -1353,7 +1448,7 @@ int main()
         .new_booking_id = 1000,
         .view_page = 0,
     };
-    State state = ui(MENU, validation, cache);
+    State state = ui(MAIN_MENU, validation, cache);
     
     while (state != EXIT) {
         state = ui(state, validation, cache);
