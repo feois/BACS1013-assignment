@@ -1,12 +1,11 @@
 #include <iostream>
 #include <iomanip>
-#include <array>
-#include <vector>
-#include <bitset>
+#include <cctype>
 #include <ctime>
+#include <array>
+#include <bitset>
 #include <map>
 #include <unordered_map>
-#include <algorithm>
 
 using namespace std;
 
@@ -43,11 +42,22 @@ void clear() {
 
 #endif
 
+template<typename T, typename U>
+bool has_key(const unordered_map<T, U> &map, const T &t) {
+    return map.find(t) != map.end();
+}
+
+template<typename T, typename U>
+bool has_key(const map<T, U> &map, const T &t) {
+    return map.find(t) != map.end();
+}
+
 template<typename T>
 struct static_vec {
     const T *arr;
     size_t size;
     
+    constexpr static_vec(): arr(nullptr), size(0) {}
     constexpr static_vec(initializer_list<T> a): arr(a.begin()), size(a.size()) {}
     constexpr const T& operator[](size_t i) const { return arr[i]; }
 };
@@ -65,6 +75,45 @@ struct static_str {
 ostream &operator <<(ostream &os, static_str s) {
     return os << s.str;
 }
+
+template<typename T>
+struct ArrayList {
+    T *array;
+    size_t length;
+    size_t count;
+    
+    constexpr ArrayList(): array(nullptr), length(0), count(0) {}
+    
+    void add(T t) {
+        if (count + 1 >= length) {
+            const auto new_length = length + 10;
+            T *new_array = new T[new_length];
+            
+            if (array != nullptr) {
+                for (int i = 0; i < count; i++)
+                    new_array = array[i];
+                
+                delete[] array;
+            }
+            
+            array = new_array;
+            length = new_length;
+        }
+        
+        array[count++] = t;
+    }
+    
+    template<typename F>
+    constexpr size_t count_if(F f) const {
+        size_t n = 0;
+        
+        for (int i = 0; i < count; i++)
+            if (f(array[count]))
+                n++;
+        
+        return n;
+    }
+};
 
 enum State {
     MENU,
@@ -123,7 +172,8 @@ enum Gender : bool {
 struct Service {
     static_str name;
     static_str description;
-    double fee;
+    double consultation_fee;
+    double treatment_fee;
 };
 
 struct Staff {
@@ -150,13 +200,26 @@ struct Customer {
     string name;
     Gender gender;
     string phone_number;
-    vector<Booking> booking_history;
+    ArrayList<Booking> booking_history;
     int total_payment;
-    
 };
 
 #define unpack(...) __VA_ARGS__
 #define concat(x, y) x ## y
+#define center(qualifier, line_width, string_width, string) \
+    { \
+        qualifier size_t _LINE_WIDTH = line_width; \
+        qualifier size_t _STRING_WIDTH = string_width; \
+        if (_STRING_WIDTH > _LINE_WIDTH) cout << string; \
+        else { \
+            qualifier auto PADDING = _LINE_WIDTH - _STRING_WIDTH; \
+            qualifier auto LEFT_PADDING = PADDING / 2; \
+            qualifier auto RIGHT_PADDING = PADDING - LEFT_PADDING; \
+            coutfill(' ', LEFT_PADDING); \
+            cout << string; \
+            coutfill(' ', RIGHT_PADDING); \
+        } \
+    }
 
 constexpr array MONTH_NAMES {
     "Jan",
@@ -184,9 +247,9 @@ constexpr array WEEKDAY_NAMES {
 };
 
 constexpr array SERVICES {
-    Service {"Skin Care", "blablabla", 100},
-    Service {"Face Makeup", "lorem ipsum", 123},
-    Service {"Hair Coloring", "foo bar baz", 999},
+    Service {"Skin Care", "blablabla", 100, 200},
+    Service {"Face Makeup", "lorem ipsum", 123, 456},
+    Service {"Hair Coloring", "foo bar baz", 999, 9999},
 };
 
 constexpr array EXPERTS {
@@ -207,57 +270,17 @@ constexpr const static_str *find_longest_expert_name() {
     return p;
 }
 
-constexpr auto LONGEST_EXPERT_NAME_LENGTH = find_longest_expert_name()->len;
+constexpr auto MAX_EXPERT_NAME_LENGTH = find_longest_expert_name()->len;
 constexpr Staff ADMIN { "Administrator", MALE, "admin", "12345678" };
 constexpr auto WORK_HOURS = 6;
 constexpr auto OPENING_HOUR = 12;
 constexpr auto CUSTOMER_ENTRIES_PER_PAGE = 10;
-
-static unordered_map<time_t, bitset<WORK_HOURS * EXPERTS.size()>> schedule {};
-static unordered_map<string, Booking> all_bookings {};
-static map<string, Customer> all_customers {};
-static array<unordered_map<time_t, string>, EXPERTS.size()> treatment_schedule {}, consultation_schedule {};
-static const Staff *login_user = nullptr;
-static struct tm view_time;
-static time_t book_day;
-static ServiceType service_type;
-static Booking booking { .service = -1, .expert = -1 };
-static Customer customer;
-static int selected_hour = -1;
-static int new_booking_id = 1000;
-static int view_page = 0;
-static map<string, Customer>::iterator customer_view;
 
 auto time_now(struct tm &tm) {
     const auto t = time(nullptr);
     tm = *localtime(&t);
     return t;
 }
-
-template<typename T, typename U>
-bool has_key(const unordered_map<T, U> &map, const T &t) {
-    return map.find(t) != map.end();
-}
-
-template<typename T, typename U>
-bool has_key(const map<T, U> &map, const T &t) {
-    return map.find(t) != map.end();
-}
-
-#define center(qualifier, line_width, string_width, string) \
-    { \
-        qualifier size_t _LINE_WIDTH = line_width; \
-        qualifier size_t _STRING_WIDTH = string_width; \
-        if (_STRING_WIDTH > _LINE_WIDTH) cout << string; \
-        else { \
-            qualifier auto PADDING = _LINE_WIDTH - _STRING_WIDTH; \
-            qualifier auto LEFT_PADDING = PADDING / 2; \
-            qualifier auto RIGHT_PADDING = PADDING - LEFT_PADDING; \
-            coutfill(' ', LEFT_PADDING); \
-            cout << string; \
-            coutfill(' ', RIGHT_PADDING); \
-        } \
-    }
 
 static array<char, 128> format_string = {};
 
@@ -269,62 +292,12 @@ static array<char, 128> format_string = {};
 define_format(format_time, "%A %e %B %G (%F) %T");
 define_format(format_date, "%A %e %B %G (%F)");
 
-string format_duration() {
-    auto s = string(format_time(booking.time));
-    auto t = booking.time;
-    
-    t.tm_hour += service_type == TREATMENT ? 2 : 1;
-    mktime(&t);
-    
-    strftime(format_string.data(), format_string.size(), "~%T", &t);
-    
-    s += format_string.data();
-    
-    return s;
-}
-
-void reset_day(struct tm &t) {
-    t.tm_hour = 0;
-    t.tm_min = 0;
-    t.tm_sec = 0;
-}
-
-bool try_book_treatment(const time_t t, const int hour, const int expert) {
-    return has_key(schedule, t) || !(schedule[t][expert * WORK_HOURS + hour] || schedule[t][expert * WORK_HOURS + hour + 1]);
-}
-
-bool try_book_consultation(const time_t t, const int hour, const int expert) {
-    return has_key(schedule, t) || !schedule[t][expert * WORK_HOURS + hour];
-}
-
-bool check_hour_treatment_availability(const time_t t, const int hour) {
-    for (int i = 0; i < EXPERTS.size(); i++)
-        if (try_book_treatment(t, hour, i))
-            return true;
-    
-    return false;
-}
-
-bool check_hour_consultation_availability(const time_t t, const int hour) {
-    for (int i = 0; i < EXPERTS.size(); i++)
-        if (try_book_consultation(t, hour, i))
-            return true;
-    
-    return false;
-}
-
-bool check_day_treatment_availability(const time_t t) {
-    for (int i = 0; i < WORK_HOURS - 1; i++) {
-        if (check_hour_treatment_availability(t, i)) {
-            return true;
-        }
-    }
-    
-    return false;
-}
-
-bool check_day_consultation_availability(const time_t t) {
-    return has_key(schedule, t) || !schedule[t].all();
+struct tm reset_day(const struct tm &t) {
+    auto u = t;
+    u.tm_hour = 0;
+    u.tm_min = 0;
+    u.tm_sec = 0;
+    return u;
 }
 
 void coutfill(char c, size_t n) {
@@ -337,90 +310,212 @@ void line() {
     cout << endl;
 }
 
-void calendar(time_t today) {
-    constexpr int CELL_WIDTH = 6;
+bool is_phone_number(const string &s) {
+    for (const char &c : s)
+        if (!isdigit(c))
+            return false;
     
-    center(constexpr, CELL_WIDTH * WEEKDAY_NAMES.size(), 3 + 4 + 1, MONTH_NAMES[view_time.tm_mon] << " " << view_time.tm_year + 1900)
+    return true;
+}
+
+template<size_t EXPERT_COUNT, size_t WORK_HOURS>
+struct ExpertScheduleMap {
+    typedef bitset<EXPERT_COUNT * WORK_HOURS> Bitset;
+    typedef map<time_t, Bitset> Map;
     
-    cout << endl;
+    struct ExpertSchedule {
+        const Bitset *bs;
+        size_t expert;
+        
+        bool operator[](size_t hour) { return bs != nullptr && (*bs)[expert * 6 + hour]; }
+    };
+
+    struct ExpertScheduleSet {
+        const Bitset *bs;
+        
+        constexpr ExpertSchedule operator[](size_t expert) const { return { bs, expert }; }
+    };
     
-    for (const auto &weekday : WEEKDAY_NAMES) {
-        center(constexpr, CELL_WIDTH - 1, 3, weekday)
-        cout << ' ';
+    struct BitSetter {
+        Bitset &bs;
+        size_t expert;
+        
+        typename Bitset::reference operator[](size_t hour) { return bs[expert * 6 + hour]; }
+    };
+    
+    struct ArraySetter {
+        Bitset &bs;
+        
+        BitSetter operator[](size_t expert) { return { bs, expert }; }
+    };
+    
+    struct MapSetter {
+        ExpertScheduleMap &map;
+        
+        ArraySetter operator[](time_t day) {
+            if (!has_key(map.get_map(), day))
+                map.get_map().insert({day, {}});
+            
+            return { map.get_map()[day] };
+        }
+    };
+    
+    Map _map;
+    
+    constexpr Map &get_map() { return _map; }
+    ExpertScheduleSet operator[](time_t day) { return { (has_key(_map, day) ? &_map[day] : nullptr) }; }
+    constexpr ExpertScheduleSet operator[](const struct tm &t) const { auto u = reset_day(t); return this[mktime(&u)]; }
+    
+    MapSetter set() { return {*this}; }
+};
+
+struct Cache {
+    ExpertScheduleMap<EXPERTS.size(), WORK_HOURS> schedule;
+    unordered_map<string, Booking> all_bookings;
+    map<string, Customer> all_customers;
+    array<map<time_t, string>, EXPERTS.size()> treatment_schedule, consultation_schedule;
+    const Staff *login_user;
+    struct tm view_time;
+    time_t book_day;
+    ServiceType service_type;
+    Booking booking;
+    Customer customer;
+    int selected_hour;
+    int new_booking_id;
+    int view_page;
+    map<string, Customer>::iterator customer_view;
+    
+    bool try_book_treatment(const time_t t, const int hour, const int expert) {
+        return !(schedule[t][expert][hour] || schedule[t][expert][hour + 1]);
+    }
+
+    bool try_book_consultation(const time_t t, const int hour, const int expert) {
+        return !schedule[t][expert][hour];
+    }
+
+    bool check_hour_treatment_availability(const time_t t, const int hour) {
+        for (int i = 0; i < EXPERTS.size(); i++)
+            if (try_book_treatment(t, hour, i))
+                return true;
+        
+        return false;
+    }
+
+    bool check_hour_consultation_availability(const time_t t, const int hour) {
+        for (int i = 0; i < EXPERTS.size(); i++)
+            if (try_book_consultation(t, hour, i))
+                return true;
+        
+        return false;
+    }
+
+    bool check_day_treatment_availability(const time_t t) {
+        for (int i = 0; i < WORK_HOURS - 1; i++)
+            if (check_hour_treatment_availability(t, i))
+                return true;
+        
+        return false;
+    }
+
+    bool check_day_consultation_availability(const time_t t) {
+        return !(has_key(schedule.get_map(), t) && schedule[t].bs->all());
     }
     
-    cout << endl;
-    
-    auto view_day = view_time;
-    view_day.tm_mday = 1;
-    reset_day(view_day);
-    
-    auto t = mktime(&view_day);
-    
-    if (view_day.tm_wday > 0)
-        coutfill(' ', view_day.tm_wday * CELL_WIDTH);
-    
-    while (true) {
-        t = mktime(&view_day);
+    void print_calendar(time_t today) {
+        constexpr int CELL_WIDTH = 6;
         
-        if (view_day.tm_mon != view_time.tm_mon)
-            break;
+        center(constexpr, CELL_WIDTH * WEEKDAY_NAMES.size(), 3 + 4 + 1, MONTH_NAMES[view_time.tm_mon] << " " << view_time.tm_year + 1900)
         
-        cout << setw(2) << view_day.tm_mday++ << ' ';
+        cout << endl;
         
-        if (t < today)
-            cout << "--";
-        else
-            cout << (check_day_treatment_availability(t) ? 'T' : ' ') << (check_day_consultation_availability(t) ? 'C' : ' ');
+        for (const auto &weekday : WEEKDAY_NAMES) {
+            center(constexpr, CELL_WIDTH - 1, 3, weekday)
+            cout << ' ';
+        }
         
-        cout << ' ';
+        cout << endl;
         
-        if (view_day.tm_wday == 6)
+        auto view_day = reset_day(view_time);
+        view_day.tm_mday = 1;
+        
+        auto t = mktime(&view_day);
+        
+        if (view_day.tm_wday > 0)
+            coutfill(' ', view_day.tm_wday * CELL_WIDTH);
+        
+        while (view_day.tm_mon == view_time.tm_mon) {
+            cout << setw(2) << view_day.tm_mday++ << ' ';
+            
+            if (t < today)
+                cout << "--";
+            else
+                cout << (check_day_consultation_availability(t) ? 'C' : '-') << (check_day_treatment_availability(t) ? 'T' : '-');
+            
+            cout << ' ';
+            
+            if (view_day.tm_wday == 6)
+                cout << endl;
+            
+            t = mktime(&view_day);
+        }
+        
+        if (view_day.tm_wday != 0)
             cout << endl;
     }
-    
-    if (view_day.tm_wday != 0)
-        cout << endl;
-}
 
-void print_day_schedule(struct tm &date) {
-    constexpr static_str LABEL = "Experts";
-    constexpr auto COLUMN_SIZE = max(LABEL.len, LONGEST_EXPERT_NAME_LENGTH);
-    constexpr auto CELL_SIZE = 5;
-    
-    const auto t = mktime(&date);
-    
-    cout << "Schedule for " << format_date(date) << endl << endl;
-    cout << setfill(' ') << setw(COLUMN_SIZE) << left << LABEL;
-    
-    for (int i = 0; i < WORK_HOURS; i++) {
-        cout << '|' << 12 + i << ":00";
-    }
-    
-    cout << endl;
-    
-    for (int i = 0; i < EXPERTS.size(); i++) {
-        coutfill('-', COLUMN_SIZE);
+    void print_day_schedule(struct tm &date) {
+        constexpr static_str LABEL = "Experts";
+        constexpr auto COLUMN_SIZE = max(LABEL.len, MAX_EXPERT_NAME_LENGTH);
+        constexpr auto CELL_SIZE = 5;
         
-        for (int j = 0; j < WORK_HOURS; j++) {
-            cout << '+';
-            
-            coutfill('-', CELL_SIZE);
-        }
+        const auto t = mktime(&date);
         
-        cout << endl << setfill(' ') << setw(COLUMN_SIZE) << left << EXPERTS[i].name;
+        cout << "Schedule for " << format_date(date) << endl << endl;
+        cout << setfill(' ') << setw(COLUMN_SIZE) << left << LABEL;
         
-        for (int j = 0; j < WORK_HOURS; j++) {
-            cout << '|';
-            
-            center(constexpr, CELL_SIZE, 1, (has_key(schedule, t) && schedule[t][i * WORK_HOURS + j] ? "✗" : "✓"));
+        for (int i = 0; i < WORK_HOURS; i++) {
+            cout << '|' << 12 + i << ":00";
         }
         
         cout << endl;
+        
+        for (int i = 0; i < EXPERTS.size(); i++) {
+            coutfill('-', COLUMN_SIZE);
+            
+            for (int j = 0; j < WORK_HOURS; j++) {
+                cout << '+';
+                
+                coutfill('-', CELL_SIZE);
+            }
+            
+            cout << endl << setfill(' ') << setw(COLUMN_SIZE) << left << EXPERTS[i].name;
+            
+            for (int j = 0; j < WORK_HOURS; j++) {
+                cout << '|';
+                
+                center(constexpr, CELL_SIZE, 1, (schedule[t][i][j] ? "✗" : "✓"));
+            }
+            
+            cout << endl;
+        }
     }
-}
+    
+    string format_duration() const {
+        auto s = string(format_time(booking.time));
+        auto t = booking.time;
+        
+        t.tm_hour += service_type == TREATMENT ? 2 : 1;
+        mktime(&t);
+        
+        strftime(format_string.data(), format_string.size(), "~%T", &t);
+        
+        s += format_string.data();
+        
+        return s;
+    }
+};
 
-State ui(const State state, bool &validation)
+State ui(const State state, bool &validation, Cache &cache)
 {
     #define refresh return state;
     #define redirect(state) return state;
@@ -506,7 +601,7 @@ State ui(const State state, bool &validation)
             cout << "Available services" << endl;
             line();
             
-            booking.service = -1;
+            cache.booking.service = -1;
             
             custom_input(
                 SERVICES.size(),
@@ -514,7 +609,7 @@ State ui(const State state, bool &validation)
                 true,
                 SERVICES[i].name,
                 ({
-                    booking.service = i;
+                    cache.booking.service = i;
                     redirect(VIEW_SERVICE)
                 })
             )
@@ -524,10 +619,15 @@ State ui(const State state, bool &validation)
             {'b', "Book now", BOOKING},
             {'s', "Go back to service list", SERVICE_LIST},
         ))
-            cout << SERVICES[booking.service].name << " Service (RM " << setprecision(2) << fixed << SERVICES[booking.service].fee << ")" << endl;
+        {
+            const auto &service = SERVICES[cache.booking.service];
+            
+            cout << service.name << " Service (Consultation: RM " << setprecision(2) << fixed << service.consultation_fee << "; Treatment: RM " << service.treatment_fee << ")" << endl;
             line();
-            cout << SERVICES[booking.service].description << endl;
+            cout << service.description << endl;
+            
             break;
+        }
             
             
         opts(EXPERT_LIST, (
@@ -544,8 +644,7 @@ State ui(const State state, bool &validation)
             
             
         case BOOKING:
-            view_time = now;
-            reset_day(view_time);
+            cache.view_time = reset_day(now);
             redirect(BOOK_VIEW)
             
             
@@ -556,35 +655,34 @@ State ui(const State state, bool &validation)
             {'x', "Cancel", CUSTOMER},
         ))
         {
-            auto today = now;
+            auto today = reset_day(now);
+            cache.print_calendar(mktime(&today));
             
-            reset_day(today);
+            cout << "C means consultation is available to book" << endl;
+            cout << "T means treatment is available to book" << endl;
             
-            calendar(mktime(&today));
             break;
         }
             
             
         case BOOK_VIEW_PREV_MONTH:
             {
-                auto this_month = now;
-                
+                auto this_month = reset_day(now);
                 this_month.tm_mday = 1;
-                reset_day(this_month);
                 
-                auto prev_month = view_time;
+                auto prev_month = cache.view_time;
                 
                 prev_month.tm_mon -= 1;
                 
                 if (mktime(&prev_month) >= mktime(&this_month))
-                    view_time = prev_month;
+                    cache.view_time = prev_month;
             }
             redirect(BOOK_VIEW)
             
             
         case BOOK_VIEW_NEXT_MONTH:
-            view_time.tm_mon += 1;
-            mktime(&view_time);
+            cache.view_time.tm_mon += 1;
+            mktime(&cache.view_time);
             redirect(BOOK_VIEW)
             
             
@@ -592,11 +690,9 @@ State ui(const State state, bool &validation)
             {
                 string input;
                 
-                auto today = now;
-                
-                reset_day(today);
-                
-                calendar(mktime(&today));
+                auto today = reset_day(now);
+
+                cache.print_calendar(mktime(&today));
                 
                 if (!validation)
                     cout << endl << "Please input a future day in the month that is available for booking!" << endl;
@@ -612,22 +708,27 @@ State ui(const State state, bool &validation)
                     const unsigned int day = stoi(input);
                     
                     if (day < 32) {
-                        booking.time = view_time;
-                        booking.time.tm_mday = day;
-                        book_day = mktime(&booking.time);
+                        auto selected_day = cache.view_time;
                         
-                        const bool consultation = check_day_consultation_availability(book_day);
-                        const bool treatment = check_day_treatment_availability(book_day);
+                        selected_day.tm_mday = day;
                         
-                        auto today = now;
+                        const auto t = mktime(&selected_day);
                         
-                        reset_day(today);
-                        
-                        if (book_day >= mktime(&today) && (consultation || treatment)) {
-                            if (consultation && treatment)
-                                redirect(BOOK_SELECT_SERVICE_TYPE)
-                            else {
-                                redirect(treatment ? BOOK_TREATMENT : BOOK_CONSULTATION)
+                        if (selected_day.tm_mon == cache.view_time.tm_mon) {
+                            cache.booking.time = selected_day;
+                            cache.book_day = t;
+                            
+                            const bool consultation = cache.check_day_consultation_availability(t);
+                            const bool treatment = cache.check_day_treatment_availability(t);
+                            
+                            auto today = reset_day(now);
+                            
+                            if (t >= mktime(&today) && (consultation || treatment)) {
+                                if (consultation && treatment)
+                                    redirect(BOOK_SELECT_SERVICE_TYPE)
+                                else {
+                                    redirect(treatment ? BOOK_TREATMENT : BOOK_CONSULTATION)
+                                }
                             }
                         }
                     }
@@ -645,69 +746,69 @@ State ui(const State state, bool &validation)
             {'c', "Book consultation", BOOK_CONSULTATION},
             {'x', "Cancel", BOOK_CANCEL},
         ))
-            cout << "Booking " << format_date(booking.time) << endl;
+            cout << "Booking " << format_date(cache.booking.time) << endl;
             break;
             
             
         case BOOK_TREATMENT:
-            print_day_schedule(booking.time);
+            cache.print_day_schedule(cache.booking.time);
             
             cout << endl << "Select a time to book" << endl;
             
             custom_input(
                 WORK_HOURS - 1,
                 BOOK_CANCEL,
-                check_hour_treatment_availability(book_day, i),
+                cache.check_hour_treatment_availability(cache.book_day, i),
                 OPENING_HOUR + i << ":00~" << OPENING_HOUR + i + 2 << ":00",
                 ({
-                    service_type = TREATMENT;
-                    booking.time.tm_hour = OPENING_HOUR + i;
-                    selected_hour = i;
+                    cache.service_type = TREATMENT;
+                    cache.booking.time.tm_hour = OPENING_HOUR + i;
+                    cache.selected_hour = i;
                     redirect(BOOK_SELECT_EXPERT)
                 })
             )
         
         
         case BOOK_CONSULTATION:
-            print_day_schedule(booking.time);
+            cache.print_day_schedule(cache.booking.time);
             
             cout << endl << "Select a time to book" << endl;
             
             custom_input(
                 WORK_HOURS,
                 BOOK_CANCEL,
-                check_hour_consultation_availability(book_day, i),
+                cache.check_hour_consultation_availability(cache.book_day, i),
                 OPENING_HOUR + i << ":00~" << OPENING_HOUR + i + 1 << ":00",
                 ({
-                    service_type = CONSULTATION;
-                    booking.time.tm_hour = OPENING_HOUR + i;
-                    selected_hour = i;
+                    cache.service_type = CONSULTATION;
+                    cache.booking.time.tm_hour = OPENING_HOUR + i;
+                    cache.selected_hour = i;
                     redirect(BOOK_SELECT_EXPERT)
                 })
             )
         
         
         case BOOK_SELECT_EXPERT:
-            cout << "Booking a " << (service_type == TREATMENT ? "treatment" : "consultation") << " on " << format_duration() << endl;
+            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << cache.format_duration() << endl;
             cout << endl << "Select an expert to book" << endl;
             
             custom_input(
                 EXPERTS.size(),
                 BOOK_CANCEL,
-                service_type == TREATMENT ? try_book_treatment(book_day, selected_hour, i) : try_book_consultation(book_day, selected_hour, i),
+                cache.service_type == TREATMENT ? cache.try_book_treatment(cache.book_day, cache.selected_hour, i) : cache.try_book_consultation(cache.book_day, cache.selected_hour, i),
                 "Expert " << EXPERTS[i].name,
                 ({
-                    booking.expert = i;
+                    cache.booking.expert = i;
                     redirect(BOOK_SELECT_SERVICE)
                 })
             )
         
         
         case BOOK_SELECT_SERVICE:
-            if (booking.service != -1)
+            if (cache.booking.service != -1)
                 redirect(BOOK_ENTER_DETAILS)
             
-            cout << "Booking a " << (service_type == TREATMENT ? "treatment" : "consultation") << " on " << format_duration() << endl;
+            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << cache.format_duration() << endl;
             
             custom_input(
                 SERVICES.size(),
@@ -715,7 +816,7 @@ State ui(const State state, bool &validation)
                 true,
                 "Service " << SERVICES[i].name,
                 ({
-                    booking.service = i;
+                    cache.booking.service = i;
                     redirect(BOOK_ENTER_DETAILS)
                 })
             )
@@ -725,30 +826,30 @@ State ui(const State state, bool &validation)
             cout << "Customer Details" << endl;
             line();
             cout << "Enter your name: ";
-            cin >> customer.name;
+            cin >> cache.customer.name;
             
-            if (!has_key(all_customers, customer.name)) {
+            if (!has_key(cache.all_customers, cache.customer.name)) {
                 cout << "Enter your gender (M/F): ";
                 
                 while (true) {
                     const char c = input();
                     
                     if (c == 'm') {
-                        customer.gender = MALE;
+                        cache.customer.gender = MALE;
                         cout << "Male";
                         break;
                     }
                     if (c == 'f') {
-                        customer.gender = FEMALE;
+                        cache.customer.gender = FEMALE;
                         cout << "Female";
                         break;
                     }
                 }
                 
                 cout << endl << "Enter your phone number (numbers only): ";
-                cin >> customer.phone_number;
+                cin >> cache.customer.phone_number;
                 
-                if (customer.phone_number.size() > 11 || !all_of(customer.phone_number.begin(), customer.phone_number.end(), ::isdigit)) {
+                if (cache.customer.phone_number.size() > 11 || !is_phone_number(cache.customer.phone_number)) {
                     cout << "Invalid input" << endl;
                     break;
                 }
@@ -761,17 +862,21 @@ State ui(const State state, bool &validation)
             {'y', "Yes, I am sure that the booking information is indeed what I wanted", BOOK_PAYMENT},
             {'n', "No, there are mistakes in the booking information", BOOK_CANCEL},
         ))
+        {
+            const auto &service = SERVICES[cache.booking.service];
+            
             cout << "Please confirm that the following information are correct" << endl;
             line();
-            cout << "Name: " << customer.name << endl;
-            cout << "Gender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
-            cout << "Contact number: " << customer.phone_number << endl << endl;
-            cout << (service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << format_duration() << endl;
-            cout << "Expert: " << EXPERTS[booking.expert].name << endl;
-            cout << "Service: " << SERVICES[booking.service].name << endl;
-            cout << SERVICES[booking.service].description << endl;
-            cout << endl << "Fee: RM " << setprecision(2) << fixed << SERVICES[booking.service].fee << endl;
+            cout << "Name: " << cache.customer.name << endl;
+            cout << "Gender: " << (cache.customer.gender == MALE ? "Male" : "Female") << endl;
+            cout << "Contact number: " << cache.customer.phone_number << endl << endl;
+            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << cache.format_duration() << endl;
+            cout << "Expert: " << EXPERTS[cache.booking.expert].name << endl;
+            cout << "Service: " << service.name << endl;
+            cout << service.description << endl;
+            cout << endl << "Fee: RM " << setprecision(2) << fixed << (cache.service_type == TREATMENT ? service.treatment_fee : service.consultation_fee) << endl;
             break;
+        }
         
         
         opts(BOOK_PAYMENT, (
@@ -785,53 +890,55 @@ State ui(const State state, bool &validation)
         
         opts(BOOK_SUCCESS, (OPT_MAIN_MENU(CUSTOMER)))
         {
+            const auto &service = SERVICES[cache.booking.service];
+            
             string id = "B";
             
-            id += to_string(new_booking_id);
+            id += to_string(cache.new_booking_id);
             
-            auto &sched = (service_type == TREATMENT ? treatment_schedule : consultation_schedule);
+            auto &sched = (cache.service_type == TREATMENT ? cache.treatment_schedule : cache.consultation_schedule);
             
-            sched[booking.expert].insert({mktime(&booking.time), id});
+            sched[cache.booking.expert].insert({mktime(&cache.booking.time), id});
             
-            booking.service_type = service_type;
+            cache.booking.service_type = cache.service_type;
             
-            all_bookings.insert({id, booking});
+            cache.all_bookings.insert({std::move(id), cache.booking});
             
-            if (has_key(all_customers, customer.name)) {
-                auto &c = all_customers[customer.name];
+            if (has_key(cache.all_customers, cache.customer.name)) {
+                auto &c = cache.all_customers[cache.customer.name];
                 
-                c.booking_history.push_back(booking);
-                c.total_payment += SERVICES[booking.service].fee;
+                c.booking_history.add(cache.booking);
+                c.total_payment += cache.service_type == TREATMENT ? service.treatment_fee : service.consultation_fee;
             }
             else {
-                customer.booking_history = {};
-                customer.total_payment = 0;
+                cache.customer.booking_history = {};
+                cache.customer.total_payment = 0;
                 
-                all_customers.insert({customer.name, customer});
+                cache.all_customers.insert({cache.customer.name, cache.customer});
             }
             
-            if (has_key(schedule, book_day))
-                schedule.insert({book_day, {}});
+            if (has_key(cache.schedule.get_map(), cache.book_day))
+                cache.schedule.get_map().insert({cache.book_day, {}});
             
-            for (int i = 0; i < (service_type == TREATMENT ? 2 : 1); i++)
-                schedule[book_day][booking.expert * WORK_HOURS + selected_hour + i] = true;
+            for (int i = 0; i < (cache.service_type == TREATMENT ? 2 : 1); i++)
+                cache.schedule.set()[cache.book_day][cache.booking.expert][cache.selected_hour + i] = true;
             
             cout << "Successfully booked the appointment!" << endl;
-            cout << endl << "Appointment id: B" << new_booking_id++ << endl;
-            cout << (service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << format_duration() << endl;
-            cout << "Expert: " << EXPERTS[booking.expert].name << endl;
-            cout << "Service: " << SERVICES[booking.service].name << endl;
-            cout << SERVICES[booking.service].description << endl;
+            cout << endl << "Appointment id: B" << cache.new_booking_id++ << endl;
+            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << cache.format_duration() << endl;
+            cout << "Expert: " << EXPERTS[cache.booking.expert].name << endl;
+            cout << "Service: " << service.name << endl;
+            cout << service.description << endl;
             
-            booking = { .service = -1, .expert = -1 };
+            cache.booking = { .service = -1, .expert = -1 };
             
             break;
         }
         
         
         case BOOK_CANCEL:
-            selected_hour = -1;
-            booking = { .service = -1, .expert = -1 };
+            cache.selected_hour = -1;
+            cache.booking = { .service = -1, .expert = -1 };
             redirect(BOOK_VIEW)
         
         
@@ -846,13 +953,13 @@ State ui(const State state, bool &validation)
             cin >> id;
             cout << endl;
             
-            if (has_key(all_bookings, id)) {
-                const auto &appointment = all_bookings[id];
+            if (has_key(cache.all_bookings, id)) {
+                const auto &appointment = cache.all_bookings[id];
                 
-                booking.time = appointment.time;
-                service_type = appointment.service_type;
+                cache.booking.time = appointment.time;
+                cache.service_type = appointment.service_type;
                 
-                cout << "Your appointment is a " << SERVICES[appointment.service].name << " " << (service_type == TREATMENT ? "treatment" : "consultation") << " during " << format_duration() << endl;
+                cout << "Your appointment is a " << SERVICES[appointment.service].name << " " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " during " << cache.format_duration() << endl;
                 cout << "Expert in charge: " << EXPERTS[appointment.expert].name << endl;
                 cout << "Service description: " << SERVICES[appointment.service].description << endl;
             }
@@ -887,24 +994,24 @@ State ui(const State state, bool &validation)
                 cout << endl;
                 
                 if (username == ADMIN.username.str)
-                    login_user = &ADMIN;
+                    cache.login_user = &ADMIN;
                 else {
                     for (const Staff &expert : EXPERTS) {
                         if (expert.username.str == username) {
-                            login_user = &expert;
+                            cache.login_user = &expert;
                             break;
                         }
                     }
                 }
                 
-                if (login_user == nullptr)
+                if (cache.login_user == nullptr)
                     cout << "Invalid username" << endl;
-                else if (password == login_user->password.str)
+                else if (password == cache.login_user->password.str)
                     redirect(STAFF_MENU)
                 else
                     cout << "Invalid password" << endl;
                 
-                login_user = nullptr;
+                cache.login_user = nullptr;
             }
             
             break;
@@ -918,14 +1025,14 @@ State ui(const State state, bool &validation)
             {'5', "Log out", LOGOUT},
         ))
             cout << "Staff menu" << endl;
-            cout << "Currently login as " << login_user->username << " (" << login_user->name << ")" << endl;
+            cout << "Currently login as " << cache.login_user->username << " (" << cache.login_user->name << ")" << endl;
             
-            if (login_user == &ADMIN)
-                booking.expert = -1;
+            if (cache.login_user == &ADMIN)
+                cache.booking.expert = -1;
             else {
                 for (int i = 0; i < EXPERTS.size(); i++)
-                    if (login_user == &EXPERTS[i]) {
-                        booking.expert = i;
+                    if (cache.login_user == &EXPERTS[i]) {
+                        cache.booking.expert = i;
                         break;
                     }
             }
@@ -934,14 +1041,16 @@ State ui(const State state, bool &validation)
             
             
         case TREATMENT_SCHEDULE:
-            service_type = TREATMENT;
-            view_time = now;
+            cache.service_type = TREATMENT;
+            cache.view_time = reset_day(now);
+            cache.view_time.tm_mday -= cache.view_time.tm_wday;
             redirect(SCHEDULE_VIEW)
             
             
         case CONSULTATION_SCHEDULE:
-            service_type = CONSULTATION;
-            view_time = now;
+            cache.service_type = CONSULTATION;
+            cache.view_time = reset_day(now);
+            cache.view_time.tm_mday -= cache.view_time.tm_wday;
             redirect(SCHEDULE_VIEW)
             
         
@@ -951,26 +1060,27 @@ State ui(const State state, bool &validation)
             OPT_MAIN_MENU(STAFF_MENU),
         ))
         {
-            if (login_user == &ADMIN)
+            if (cache.login_user == &ADMIN)
                 redirect(INVALID_USER)
             
-            view_time.tm_mday -= view_time.tm_wday;
-            reset_day(view_time);
-            view_time.tm_hour = OPENING_HOUR;
+            cache.view_time.tm_hour = OPENING_HOUR;
             
             constexpr auto LABEL_SIZE = 5;
             constexpr auto CELL_SIZE = 5;
             constexpr auto LINE_WIDTH = LABEL_SIZE + WEEKDAY_NAMES.size() * (CELL_SIZE + 1);
             constexpr static_str SEPARATOR = " ~ ";
             
-            auto we = view_time;
+            auto we = cache.view_time;
             
             we.tm_mday += WEEKDAY_NAMES.size() - 1;
             
-            const string week_start = format_date(view_time);
+            mktime(&cache.view_time);
+            mktime(&we);
+            
+            const string week_start = format_date(cache.view_time);
             const string week_end = format_date(we);
             
-            center(const, LINE_WIDTH, week_start.length() + SEPARATOR.len + week_end.length(), week_start << SEPARATOR.str << week_end)
+            center(const, LINE_WIDTH, week_start.length() + SEPARATOR.len + week_end.length(), week_start << SEPARATOR << week_end)
             
             cout << endl;
             coutfill(' ', 5);
@@ -982,7 +1092,7 @@ State ui(const State state, bool &validation)
             
             cout << endl;
             
-            for (int i = 0; i < WORK_HOURS; i++, view_time.tm_hour++) {
+            for (int i = 0; i < WORK_HOURS; i++, cache.view_time.tm_hour++) {
                 coutfill('-', LABEL_SIZE);
                 
                 for (int j = 0; j < WEEKDAY_NAMES.size(); j++) {
@@ -992,62 +1102,62 @@ State ui(const State state, bool &validation)
                 
                 cout << endl << OPENING_HOUR + i << ":00";
                 
-                for (int j = 0; j < WEEKDAY_NAMES.size(); j++, view_time.tm_mday++) {
-                    const auto t = mktime(&view_time);
+                for (int j = 0; j < WEEKDAY_NAMES.size(); j++, cache.view_time.tm_mday++) {
+                    const auto t = mktime(&cache.view_time);
                     const string *id = nullptr;
                     
-                    if (service_type == TREATMENT) {
-                        if (has_key(treatment_schedule[booking.expert], t))
-                            id = &treatment_schedule[booking.expert][t];
+                    if (cache.service_type == TREATMENT) {
+                        if (has_key(cache.treatment_schedule[cache.booking.expert], t))
+                            id = &cache.treatment_schedule[cache.booking.expert][t];
                         else if (i > 0) {
-                            auto prev_hour = view_time;
+                            auto prev_hour = cache.view_time;
                             
                             prev_hour.tm_hour -= 1;
                             
                             const auto pt = mktime(&prev_hour);
                             
-                            if (has_key(treatment_schedule[booking.expert], pt))
-                                id = &treatment_schedule[booking.expert][pt];
+                            if (has_key(cache.treatment_schedule[cache.booking.expert], pt))
+                                id = &cache.treatment_schedule[cache.booking.expert][pt];
                         }
                     }
-                    else if (has_key(consultation_schedule[booking.expert], t))
-                        id = &consultation_schedule[booking.expert][t];
+                    else if (has_key(cache.consultation_schedule[cache.booking.expert], t))
+                        id = &cache.consultation_schedule[cache.booking.expert][t];
                     
                     cout << '|' << (id == nullptr ? "  -  " : *id);
                 }
                 
-                view_time.tm_mday -= WEEKDAY_NAMES.size();
+                cache.view_time.tm_mday -= WEEKDAY_NAMES.size();
                 
                 cout << endl;
             }
+            
             break;
         }
         
         
         case SCHEDULE_VIEW_PREV_WEEK:
         {
-            auto this_week = now;
-            auto prev_week = view_time;
+            auto this_week = reset_day(now);
+            auto prev_week = cache.view_time;
             
             this_week.tm_mday -= this_week.tm_wday;
             prev_week.tm_mday -= WEEKDAY_NAMES.size();
             
-            reset_day(this_week);
-            
             if (mktime(&prev_week) >= mktime(&this_week))
-                view_time = prev_week;
+                cache.view_time = prev_week;
             
             redirect(SCHEDULE_VIEW)
         }
         
         
         case SCHEDULE_VIEW_NEXT_WEEK:
-            view_time.tm_mday += WEEKDAY_NAMES.size();
+            cache.view_time.tm_mday += WEEKDAY_NAMES.size();
+            mktime(&cache.view_time);
             redirect(SCHEDULE_VIEW)
         
             
         case CUSTOMER_DETAILS:
-            customer_view = all_customers.begin();
+            cache.customer_view = cache.all_customers.begin();
             redirect(CUSTOMER_VIEW)
         
         
@@ -1056,15 +1166,15 @@ State ui(const State state, bool &validation)
             {'d', "Next page", CUSTOMER_VIEW_NEXT_PAGE},
             OPT_MAIN_MENU(STAFF_MENU),
         ))
-            if (all_customers.size() > 0) {
-                cout << "Customers (Page " << view_page + 1 << " of " << (all_customers.size() + CUSTOMER_ENTRIES_PER_PAGE - 1) / CUSTOMER_ENTRIES_PER_PAGE << ')' << endl;
+            if (cache.all_customers.size() > 0) {
+                cout << "Customers (Page " << cache.view_page + 1 << " of " << (cache.all_customers.size() + CUSTOMER_ENTRIES_PER_PAGE - 1) / CUSTOMER_ENTRIES_PER_PAGE << ')' << endl;
                 line();
                 
-                const auto offset = view_page * CUSTOMER_ENTRIES_PER_PAGE;
+                const auto offset = cache.view_page * CUSTOMER_ENTRIES_PER_PAGE;
                 
-                auto view = customer_view;
+                auto view = cache.customer_view;
                 
-                for (auto i = 0; i < CUSTOMER_ENTRIES_PER_PAGE && view != all_customers.end(); i++, view++) {
+                for (auto i = 0; i < CUSTOMER_ENTRIES_PER_PAGE && view != cache.all_customers.end(); i++, view++) {
                     const auto &customer = view->second;
                     
                     cout << offset + i + 1 << ". " << customer.name << " (" << (customer.gender == MALE ? "Male" : "Female") << ") 📞 " << customer.phone_number << endl;
@@ -1077,21 +1187,21 @@ State ui(const State state, bool &validation)
         
         
         case CUSTOMER_VIEW_PREV_PAGE:
-            if (view_page > 0) {
-                view_page--;
+            if (cache.view_page > 0) {
+                cache.view_page--;
                 
                 for (auto i = 0; i < CUSTOMER_ENTRIES_PER_PAGE; i++)
-                    customer_view--;
+                    cache.customer_view--;
             }
             redirect(CUSTOMER_VIEW)
         
         
         case CUSTOMER_VIEW_NEXT_PAGE:
-            if (view_page + 1 < (all_customers.size() + CUSTOMER_ENTRIES_PER_PAGE - 1) / CUSTOMER_ENTRIES_PER_PAGE) {
-                view_page++;
+            if (cache.view_page + 1 < (cache.all_customers.size() + CUSTOMER_ENTRIES_PER_PAGE - 1) / CUSTOMER_ENTRIES_PER_PAGE) {
+                cache.view_page++;
                 
                 for (auto i = 0; i < CUSTOMER_ENTRIES_PER_PAGE; i++)
-                    customer_view++;
+                    cache.customer_view++;
             }
             redirect(CUSTOMER_VIEW)
             
@@ -1106,18 +1216,17 @@ State ui(const State state, bool &validation)
         
         
         opts(SALES_REPORT_CUSTOMER_SUMMARY, (OPT_MAIN_MENU(STAFF_MENU)))
-        {
             cout << "Sales Report: Customer Summary" << endl;
             line();
             
-            if (all_customers.size() > 0) {
+            if (cache.all_customers.size() > 0) {
                 const Customer *most_appointments = nullptr;
                 const Customer *most_paid = nullptr;
                 
-                for (const auto &p : all_customers) {
+                for (const auto &p : cache.all_customers) {
                     const auto &customer = p.second;
                     
-                    if (most_appointments == nullptr || most_appointments->booking_history.size() < customer.booking_history.size())
+                    if (most_appointments == nullptr || most_appointments->booking_history.count < customer.booking_history.count)
                         most_appointments = &customer;
                     
                     if (most_paid == nullptr || most_paid->total_payment < customer.total_payment)
@@ -1126,25 +1235,27 @@ State ui(const State state, bool &validation)
                 
                 {
                     const auto &customer = *most_appointments;
-                    const auto treatment_count = count_if(customer.booking_history.begin(), customer.booking_history.end(), [](const Booking &a) { return a.service_type == TREATMENT; });
-                    const auto consultation_count = customer.booking_history.size() - treatment_count;
+                    const auto treatment_count = customer.booking_history.count_if([](const Booking &a) { return a.service_type == TREATMENT; });
+                    const auto consultation_count = customer.booking_history.count - treatment_count;
                     
                     cout << "Customer who booked the highest count of appointments: " << customer.name << endl;
                     cout << "\tGender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
-                    cout << "\tAppointment count: " << customer.booking_history.size() << endl;
+                    cout << "\tAppointment count: " << customer.booking_history.count << endl;
                     cout << "\tBooked consultation count: " << consultation_count << endl;
                     cout << "\tBooked treatment count: " << treatment_count << endl;
                     cout << "\tTotal Payment: " << customer.total_payment << endl;
                 }
                 
+                line();
+                
                 {
                     const auto &customer = *most_paid;
-                    const auto treatment_count = count_if(customer.booking_history.begin(), customer.booking_history.end(), [](const Booking &a) { return a.service_type == TREATMENT; });
-                    const auto consultation_count = customer.booking_history.size() - treatment_count;
+                    const auto treatment_count = customer.booking_history.count_if([](const Booking &a) { return a.service_type == TREATMENT; });
+                    const auto consultation_count = customer.booking_history.count - treatment_count;
                     
                     cout << "Customer who booked the highest count of appointments: " << customer.name << endl;
                     cout << "\tGender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
-                    cout << "\tAppointment count: " << customer.booking_history.size() << endl;
+                    cout << "\tAppointment count: " << customer.booking_history.count << endl;
                     cout << "\tBooked consultation count: " << consultation_count << endl;
                     cout << "\tBooked treatment count: " << treatment_count << endl;
                     cout << "\tTotal Payment: " << customer.total_payment << endl;
@@ -1154,12 +1265,18 @@ State ui(const State state, bool &validation)
                 cout << "Not enough data" << endl;
             
             break;
-        }    
             
         
         
         opts(SALES_REPORT_EXPERT_SUMMARY, (OPT_MAIN_MENU(STAFF_MENU)))
+        {
+            constexpr static_str HOURS_WORKED = "Hours Worked", TOTAL_SALES = "Total Sales";
+            constexpr auto MAX_RECORD_NAME_LEN = max(HOURS_WORKED.len, TOTAL_SALES.len);
+            
+            coutfill(' ', MAX_RECORD_NAME_LEN);
+            
             break;
+        }
         
         
         opts(SALES_REPORT_FINANCE_SUMMARY, (OPT_MAIN_MENU(STAFF_MENU)))
@@ -1170,7 +1287,7 @@ State ui(const State state, bool &validation)
             {'l', "Log in", LOGIN},
             OPT_MAIN_MENU(MENU),
         ))
-            login_user = nullptr;
+            cache.login_user = nullptr;
             cout << "Successfully logged out!" << endl;
             break;
         
@@ -1186,6 +1303,7 @@ State ui(const State state, bool &validation)
         
         
         default:
+            cout << "Invalid state " << state << endl;
             break;
     }
     
@@ -1223,13 +1341,25 @@ State ui(const State state, bool &validation)
 int main()
 {
     bool validation = true;
-    State state = ui(MENU, validation);
+    Cache cache {
+        .schedule = {},
+        .all_bookings = {},
+        .all_customers = {},
+        .treatment_schedule = {},
+        .consultation_schedule = {},
+        .login_user = nullptr,
+        .booking = { .service = -1, .expert = -1 },
+        .selected_hour = -1,
+        .new_booking_id = 1000,
+        .view_page = 0,
+    };
+    State state = ui(MENU, validation, cache);
     
     while (state != EXIT) {
-        state = ui(state, validation);
+        state = ui(state, validation, cache);
     }
     
-    ui(state, validation);
+    ui(state, validation, cache);
     
     return 0;
 }
