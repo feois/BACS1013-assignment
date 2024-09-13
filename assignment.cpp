@@ -28,12 +28,12 @@ void clear() {
 
 char input_key_impl() {
     struct termios oldattr, newattr;
-    tcgetattr( STDIN_FILENO, &oldattr );
+    tcgetattr(STDIN_FILENO, &oldattr);
     newattr = oldattr;
-    newattr.c_lflag &= ~( ICANON | ECHO );
-    tcsetattr( STDIN_FILENO, TCSANOW, &newattr );
+    newattr.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newattr);
     const char c = getchar();
-    tcsetattr( STDIN_FILENO, TCSANOW, &oldattr );
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldattr);
     return c;
 }
 
@@ -143,7 +143,7 @@ struct Time {
         return *this;
     }
     
-    constexpr Time &calibrate() {
+    Time &calibrate() {
         tt = mktime(&t);
         return *this;
     }
@@ -338,27 +338,67 @@ static array<char, 128> format_string = {};
 define_format(format_time, "%A %e %B %G (%F) %T");
 define_format(format_date, "%A %e %B %G (%F)");
 
-void coutfill(char c, size_t n) {
-    if (n > 0)
-        cout << setfill(c) << setw(n) << c;
+template<char C, size_t N>
+void coutfill() {
+    if (N > 0)
+        cout << setfill(C) << setw(N) << C;
 }
 
-template<typename F>
-void center(const size_t line_width, const size_t string_width, F f) {
-    if (string_width > line_width) f();
+template<char C>
+void coutfill(const size_t n) {
+    if (n > 0)
+        cout << setfill(C) << setw(n) << C;
+}
+
+// void coutfill(const char c, const size_t n) {
+//     if (n > 0)
+//         cout << setfill(c) << setw(n) << c;
+// }
+
+template<size_t LINE_WIDTH, size_t STRING_WIDTH, typename F>
+void center(F f) {
+    if (STRING_WIDTH > LINE_WIDTH) f();
     else {
-        const auto padding = line_width - string_width;
-        const auto left = padding / 2;
-        const auto right = padding - left;
+        constexpr auto PADDING = LINE_WIDTH - STRING_WIDTH;
+        constexpr auto LEFT = PADDING / 2;
+        constexpr auto RIGHT = PADDING - LEFT;
         
-        coutfill(' ', left);
+        coutfill<' ', LEFT>();
         f();
-        coutfill(' ', right);
+        coutfill<' ', RIGHT>();
     }
 }
 
+template<size_t LINE_WIDTH, typename F>
+void center(const size_t string_width, F f) {
+    if (string_width > LINE_WIDTH) f();
+    else {
+        const auto padding = LINE_WIDTH - string_width;
+        const auto left = padding / 2;
+        const auto right = padding - left;
+        
+        coutfill<' '>(left);
+        f();
+        coutfill<' '>(right);
+    }
+}
+
+// template<typename F>
+// void center(const size_t line_width, const size_t string_width, F f) {
+//     if (string_width > line_width) f();
+//     else {
+//         const auto padding = line_width - string_width;
+//         const auto left = padding / 2;
+//         const auto right = padding - left;
+        
+//         coutfill<' '>(left);
+//         f();
+//         coutfill<' '>(right);
+//     }
+// }
+
 void line() {
-    coutfill('-', 20);
+    coutfill<'-', 20>();
     cout << endl;
 }
 
@@ -466,12 +506,12 @@ struct Cache {
     void print_calendar(const Time &today) {
         constexpr int CELL_WIDTH = 6;
         
-        center(CELL_WIDTH * WEEKDAY_NAMES.size(), 3 + 4 + 1, [&]() { cout << MONTH_NAMES[view_time.month()] << " " << view_time.year(); });
+        center<CELL_WIDTH * WEEKDAY_NAMES.size(), 3 + 4 + 1>([&]() { cout << MONTH_NAMES[view_time.month()] << " " << view_time.year(); });
         
         cout << endl;
         
         for (const auto &weekday : WEEKDAY_NAMES) {
-            center(CELL_WIDTH - 1, 3, [&]() { cout << weekday; });
+            center<CELL_WIDTH - 1, 3>([&]() { cout << weekday; });
             cout << ' ';
         }
         
@@ -480,7 +520,7 @@ struct Cache {
         Time view_day = view_time;
         
         if (view_day.day_of_the_week() > 0)
-            coutfill(' ', view_day.day_of_the_week() * CELL_WIDTH);
+            coutfill<' '>(view_day.day_of_the_week() * CELL_WIDTH);
         
         while (view_day.month() == view_time.month()) {
             cout << setw(2) << view_day.day() << ' ';
@@ -517,12 +557,12 @@ struct Cache {
         cout << endl;
         
         for (int i = 0; i < EXPERTS.size(); i++) {
-            coutfill('-', COLUMN_SIZE);
+            coutfill<'-', COLUMN_SIZE>();
             
             for (int j = 0; j < WORK_HOURS; j++) {
                 cout << '+';
                 
-                coutfill('-', CELL_SIZE);
+                coutfill<'-', CELL_SIZE>();
             }
             
             cout << endl << setfill(' ') << setw(COLUMN_SIZE) << left << EXPERTS[i].name;
@@ -530,7 +570,7 @@ struct Cache {
             for (int j = 0; j < WORK_HOURS; j++) {
                 cout << '|';
                 
-                center(CELL_SIZE, 1, [&]() { cout << (schedule[date][i][j] ? "✗" : "✓"); });
+                center<CELL_SIZE, 1>([&]() { cout << (schedule[date][i][j] ? "✗" : "✓"); });
             }
             
             cout << endl;
@@ -572,7 +612,7 @@ void print_customer_data(const User &customer) {
     cout << "\tTotal Payment: " << data.total_payment << endl;
 }
 
-template<const size_t OPTION_COUNT, const State CANCEL_STATE, typename F, typename G, typename H>
+template<size_t OPTION_COUNT, State CANCEL_STATE, typename F, typename G, typename H>
 State custom_input(const State state, bool &validation, F checker, G description, H matching) {
     if (!validation)
         cout << endl << "Invalid input!" << endl;
@@ -1146,14 +1186,14 @@ State ui(const State state, bool &validation, Cache &cache)
             const string week_start = format_date(cache.view_time);
             const string week_end = format_date(cache.view_time.copy().set_day(cache.view_time.day() + 6).calibrate());
             
-            center(LINE_WIDTH, week_start.length() + SEPARATOR.len + week_end.length(), [&]() { cout << week_start << SEPARATOR << week_end; });
+            center<LINE_WIDTH>(week_start.length() + SEPARATOR.len + week_end.length(), [&]() { cout << week_start << SEPARATOR << week_end; });
             
             cout << endl;
-            coutfill(' ', 5);
+            coutfill<' ', 5>();
             
             for (const auto &weekday : WEEKDAY_NAMES) {
                 cout << '|';
-                center(5, 3, [&]() { cout << weekday; });
+                center<5, 3>([&]() { cout << weekday; });
             }
             
             cout << endl;
@@ -1161,11 +1201,11 @@ State ui(const State state, bool &validation, Cache &cache)
             Time t = cache.view_time.copy().set_hour(OPENING_HOUR).calibrate();
             
             for (int i = 0; i < WORK_HOURS; i++, t = cache.view_time.copy().set_hour(OPENING_HOUR + ++i).calibrate()) {
-                coutfill('-', LABEL_SIZE);
+                coutfill<'-', LABEL_SIZE>();
                 
                 for (int j = 0; j < WEEKDAY_NAMES.size(); j++) {
                     cout << '+';
-                    coutfill('-', CELL_SIZE);
+                    coutfill<'-', CELL_SIZE>();
                 }
                 
                 cout << endl << t.hour() << ":00";
@@ -1310,7 +1350,7 @@ State ui(const State state, bool &validation, Cache &cache)
             constexpr ConstStr HOURS_WORKED = "Hours Worked", TOTAL_SALES = "Total Sales";
             constexpr auto MAX_RECORD_NAME_LEN = max(HOURS_WORKED.len, TOTAL_SALES.len);
             
-            coutfill(' ', MAX_RECORD_NAME_LEN);
+            coutfill<' ', MAX_RECORD_NAME_LEN>();
             
             break;
         }
