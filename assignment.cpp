@@ -62,67 +62,12 @@ bool has_key(const map<T, U> &map, const T &t) {
 }
 
 template<typename T>
-struct ArrayList {
-    T *array;
-    size_t length;
-    size_t count;
-    
-    constexpr ArrayList(): array(nullptr), length(0), count(0) {}
-    
-    ArrayList(const size_t n): array(new T[n]), length(n), count(0) {}
-    
-    ~ArrayList() {
-        if (array != nullptr)
-            delete array;
-    }
-    
-    void add(T t) {
-        if (count + 1 >= length) {
-            const auto new_length = length + 10;
-            T *new_array = new T[new_length];
-            
-            if (array != nullptr) {
-                for (int i = 0; i < count; i++)
-                    new_array[i] = array[i];
-                
-                delete[] array;
-            }
-            
-            array = new_array;
-            length = new_length;
-        }
-        
-        array[count++] = t;
-    }
-    
-    template<typename F>
-    constexpr size_t count_if(F f) const {
-        size_t n = 0;
-        
-        for (int i = 0; i < count; i++)
-            if (f(array[count]))
-                n++;
-        
-        return n;
-    }
-    
-    constexpr T *move_array() {
-        const auto a = array;
-        
-        array = nullptr;
-        
-        return a;
-    }
-};
-
-template<typename T>
 struct ConstVec {
     const T *arr;
     size_t size;
     
     constexpr ConstVec(): arr(nullptr), size(0) {}
     constexpr ConstVec(initializer_list<T> a): arr(a.begin()), size(a.size()) {}
-    constexpr ConstVec(ArrayList<T> a): arr(a.move_array()), size(a.count) {}
     constexpr const T& operator[](size_t i) const { return arr[i]; }
 };
 
@@ -165,61 +110,61 @@ struct Time {
     struct tm t;
     time_t tt;
     
-    char hour() const { return t.tm_hour; }
-    short day() const { return t.tm_mday; }
-    char month() const { return t.tm_mon; }
-    short year() const { return t.tm_year + 1900; }
-    char day_of_the_week() const { return t.tm_wday; }
-    time_t time() const { return tt; }
+    constexpr char hour() const { return t.tm_hour; }
+    constexpr short day() const { return t.tm_mday; }
+    constexpr char month() const { return t.tm_mon; }
+    constexpr short year() const { return t.tm_year + 1900; }
+    constexpr char day_of_the_week() const { return t.tm_wday; }
+    constexpr time_t time() const { return tt; }
     
-    Time copy() const {
+    constexpr Time copy() const {
         return *this;
     }
     
-    Time &set_hour(const unsigned char hour) {
+    constexpr Time &set_hour(const unsigned char hour) {
         t.tm_hour = hour;
         t.tm_min = 0;
         t.tm_sec = 0;
         return *this;
     }
     
-    Time &set_day(const signed char day) {
+    constexpr Time &set_day(const signed char day) {
         t.tm_mday = day;
         return *this;
     }
     
-    Time &set_month(const signed char month) {
+    constexpr Time &set_month(const signed char month) {
         t.tm_mon = month;
         return *this;
     }
     
-    Time &reset_day_of_week() {
+    constexpr Time &reset_day_of_week() {
         t.tm_mday -= t.tm_wday;
         return *this;
     }
     
-    Time &calibrate() {
+    constexpr Time &calibrate() {
         tt = mktime(&t);
         return *this;
     }
     
-    bool operator <(const Time &time) const {
+    constexpr bool operator <(const Time &time) const {
         return tt < time.tt;
     }
     
-    bool operator <=(const Time &time) const {
+    constexpr bool operator <=(const Time &time) const {
         return tt <= time.tt;
     }
     
-    bool operator ==(const Time &time) const {
+    constexpr bool operator ==(const Time &time) const {
         return tt == time.tt;
     }
     
-    bool operator >(const Time &time) const {
+    constexpr bool operator >(const Time &time) const {
         return tt > time.tt;
     }
     
-    bool operator >=(const Time &time) const {
+    constexpr bool operator >=(const Time &time) const {
         return tt >= time.tt;
     }
 };
@@ -304,13 +249,8 @@ struct Booking {
     Time day;
 };
 
-// bool cmp_booking(const Booking &l, const Booking &r) {
-//     return mktime(&l.time) < mktime(r.time);
-// }
-
 struct CustomerData {
-    
-    ArrayList<Booking> booking_history;
+    map<time_t, Booking> booking_history;
     int total_payment;
 };
 
@@ -609,34 +549,58 @@ struct Cache {
     }
 };
 
-template<typename F, typename G, typename H>
-State custom_input(const State state, bool &validation, const size_t option_count, const State cancel_state, F checker, G description, H matching) {
+void print_customer_data(const User &customer) {
+    const auto &data = *customer.customer_data;
+    
+    int treatment = 0, consultation = 0;
+    
+    for (const auto &booking : data.booking_history)
+        switch (booking.second.service_type) {
+            case TREATMENT:
+                treatment += 1;
+                break;
+            
+            case CONSULTATION:
+                consultation += 1;
+                break;
+        }
+    
+    cout << "\tGender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
+    cout << "\tAppointment count: " << data.booking_history.size() << endl;
+    cout << "\tBooked consultation count: " << consultation << endl;
+    cout << "\tBooked treatment count: " << treatment << endl;
+    cout << "\tTotal Payment: " << data.total_payment << endl;
+}
+
+template<const size_t OPTION_COUNT, const State CANCEL_STATE, typename F, typename G, typename H>
+State custom_input(const State state, bool &validation, F checker, G description, H matching) {
     if (!validation)
         cout << endl << "Invalid input!" << endl;
     
     validation = true;
     
-    ArrayList<size_t> indexes { option_count };
+    size_t indexes[OPTION_COUNT] = {};
+    size_t count = 0;
     
     cout << endl << "Please select any of the following options" << endl;
     
-    for (size_t i = 0; i < option_count; i++)
+    for (size_t i = 0; i < OPTION_COUNT; i++)
         if (checker(i)) {
-            cout << static_cast<char>('1' + indexes.count) << ": ";
+            cout << static_cast<char>('1' + count) << ": ";
             description(i);
             cout << endl;
-            indexes.add(i);
+            indexes[count++] = i;
         }
     
-    cout << static_cast<char>('1' + indexes.count) << ": Cancel" << endl;
+    cout << static_cast<char>('1' + count) << ": Cancel" << endl;
     
     const char c = input_key() - '1';
     
-    if (c == indexes.count)
-        return cancel_state;
+    if (c == count)
+        return CANCEL_STATE;
     
-    if (c >= 0 && c < option_count) {
-        return matching(indexes.array[c]);
+    if (c >= 0 && c < count) {
+        return matching(indexes[c]);
     }
     
     validation = false;
@@ -782,11 +746,9 @@ State ui(const State state, bool &validation, Cache &cache)
             
             cache.booking.service = -1;
             
-            return custom_input(
+            return custom_input<SERVICES.size(), CUSTOMER_MENU>(
                 state,
                 validation,
-                SERVICES.size(),
-                CUSTOMER_MENU,
                 [](size_t) { return true; },
                 [](size_t i) { cout << SERVICES[i].name; },
                 [&](size_t i) {
@@ -923,11 +885,9 @@ State ui(const State state, bool &validation, Cache &cache)
             
             cout << endl << "Select a time to book" << endl;
             
-            return custom_input(
+            return custom_input<WORK_HOURS - 1, BOOK_CANCEL>(
                 state,
                 validation,
-                WORK_HOURS - 1,
-                BOOK_CANCEL,
                 [&](size_t i) { return cache.check_availability(TREATMENT, cache.booking.day, i); },
                 [](size_t i) { cout << OPENING_HOUR + i << ":00~" << OPENING_HOUR + i + 2 << ":00"; },
                 [&](size_t i) {
@@ -944,11 +904,9 @@ State ui(const State state, bool &validation, Cache &cache)
             
             cout << endl << "Select a time to book" << endl;
             
-            return custom_input(
+            return custom_input<WORK_HOURS, BOOK_CANCEL>(
                 state,
                 validation,
-                WORK_HOURS,
-                BOOK_CANCEL,
                 [&](size_t i) { return cache.check_availability(CONSULTATION, cache.booking.day, i); },
                 [](size_t i) { cout << OPENING_HOUR + i << ":00~" << OPENING_HOUR + i + 1 << ":00"; },
                 [&](size_t i) {
@@ -964,11 +922,9 @@ State ui(const State state, bool &validation, Cache &cache)
             cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << cache.format_booking_time() << endl;
             cout << endl << "Select an expert to book" << endl;
             
-            return custom_input(
+            return custom_input<EXPERTS.size(), BOOK_CANCEL>(
                 state,
                 validation,
-                EXPERTS.size(),
-                BOOK_CANCEL,
                 [&](size_t i) { return cache.check_availability(cache.service_type, cache.booking.day, cache.selected_hour, i); },
                 [](size_t i) { cout << "Expert " << EXPERTS[i].name; },
                 [&](size_t i) {
@@ -984,11 +940,9 @@ State ui(const State state, bool &validation, Cache &cache)
             
             cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << cache.format_booking_time() << endl;
             
-            return custom_input(
+            return custom_input<SERVICES.size(), BOOK_CANCEL>(
                 state,
                 validation,
-                SERVICES.size(),
-                BOOK_CANCEL,
                 [](size_t) { return true; },
                 [](size_t i) { cout << "Service " << SERVICES[i].name; },
                 [&](size_t i) {
@@ -1043,7 +997,7 @@ State ui(const State state, bool &validation, Cache &cache)
             
             cache.booking.service_type = cache.service_type;
             cache.booking_database.insert({std::move(id), cache.booking});
-            cache.login_user->customer_data->booking_history.add(cache.booking);
+            cache.login_user->customer_data->booking_history.insert({cache.booking.time.time(), cache.booking});
             cache.login_user->customer_data->total_payment += cache.service_type == TREATMENT ? service.treatment_fee : service.consultation_fee;
             
             if (has_key(cache.schedule.get_map(), cache.booking.day.time()))
@@ -1327,43 +1281,22 @@ State ui(const State state, bool &validation, Cache &cache)
                 
                 for (const auto &p : cache.customer_database) {
                     const auto &customer = p.second;
+                    const auto &data = *customer.customer_data;
                     
-                    if (most_appointments == nullptr || most_appointments->customer_data->booking_history.count < customer.customer_data->booking_history.count)
+                    if (most_appointments == nullptr || most_appointments->customer_data->booking_history.size() < data.booking_history.size())
                         most_appointments = &customer;
                     
-                    if (most_paid == nullptr || most_paid->customer_data->total_payment < customer.customer_data->total_payment)
+                    if (most_paid == nullptr || most_paid->customer_data->total_payment < data.total_payment)
                         most_paid = &customer;
                 }
                 
-                {
-                    const auto &customer = *most_appointments;
-                    const auto &data = *customer.customer_data;
-                    const auto treatment_count = data.booking_history.count_if([](const Booking &a) { return a.service_type == TREATMENT; });
-                    const auto consultation_count = data.booking_history.count - treatment_count;
-                    
-                    cout << "Customer who booked the highest count of appointments: " << customer.name << endl;
-                    cout << "\tGender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
-                    cout << "\tAppointment count: " << data.booking_history.count << endl;
-                    cout << "\tBooked consultation count: " << consultation_count << endl;
-                    cout << "\tBooked treatment count: " << treatment_count << endl;
-                    cout << "\tTotal Payment: " << data.total_payment << endl;
-                }
+                cout << "Customer who booked the highest count of appointments: " << most_appointments->name << endl;
+                print_customer_data(*most_appointments);
                 
                 line();
                 
-                {
-                    const auto &customer = *most_paid;
-                    const auto &data = *customer.customer_data;
-                    const auto treatment_count = data.booking_history.count_if([](const Booking &a) { return a.service_type == TREATMENT; });
-                    const auto consultation_count = data.booking_history.count - treatment_count;
-                    
-                    cout << "Customer who paid most for our services: " << customer.name << endl;
-                    cout << "\tGender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
-                    cout << "\tAppointment count: " << data.booking_history.count << endl;
-                    cout << "\tBooked consultation count: " << consultation_count << endl;
-                    cout << "\tBooked treatment count: " << treatment_count << endl;
-                    cout << "\tTotal Payment: " << data.total_payment << endl;
-                }
+                cout << "Customer who paid most for our services: " << most_paid->name << endl;
+                print_customer_data(*most_paid);
             }
             else
                 cout << "Not enough data" << endl;
