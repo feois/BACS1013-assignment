@@ -107,65 +107,68 @@ bool operator ==(const ConstStr &x, const ConstStr &y) {
 }
 
 struct Time {
-    struct tm t;
-    time_t tt;
+    struct tm raw_time;
+    time_t time_int;
     
-    constexpr char hour() const { return t.tm_hour; }
-    constexpr short day() const { return t.tm_mday; }
-    constexpr char month() const { return t.tm_mon; }
-    constexpr short year() const { return t.tm_year + 1900; }
-    constexpr char day_of_the_week() const { return t.tm_wday; }
-    constexpr time_t time() const { return tt; }
+    constexpr char hour() const { return raw_time.tm_hour; }
+    constexpr short day() const { return raw_time.tm_mday; }
+    constexpr char month() const { return raw_time.tm_mon; }
+    constexpr short year() const { return raw_time.tm_year + 1900; }
+    constexpr char day_of_the_week() const { return raw_time.tm_wday; }
+    constexpr const time_t &time() const { return time_int; }
+    constexpr const struct tm &raw() const { return raw_time; }
+    constexpr struct tm &raw() { return raw_time; }
     
     constexpr Time copy() const {
         return *this;
     }
     
     constexpr Time &set_hour(const unsigned char hour) {
-        t.tm_hour = hour;
-        t.tm_min = 0;
-        t.tm_sec = 0;
+        raw().tm_hour = 0;
+        raw_time.tm_hour = hour;
+        raw_time.tm_min = 0;
+        raw_time.tm_sec = 0;
         return *this;
     }
     
     constexpr Time &set_day(const signed char day) {
-        t.tm_mday = day;
+        raw_time.tm_mday = day;
         return *this;
     }
     
     constexpr Time &set_month(const signed char month) {
-        t.tm_mon = month;
+        raw_time.tm_mon = month;
         return *this;
     }
     
     constexpr Time &reset_day_of_week() {
-        t.tm_mday -= t.tm_wday;
+        raw_time.tm_mday -= raw_time.tm_wday;
         return *this;
     }
     
     Time &calibrate() {
-        tt = mktime(&t);
+        time_int = mktime(&raw_time);
         return *this;
     }
     
-    constexpr bool operator <(const Time &time) const {
-        return tt < time.tt;
+    constexpr bool operator <(const Time &t) const {
+        return time() < t.time();
     }
     
-    constexpr bool operator <=(const Time &time) const {
-        return tt <= time.tt;
+    constexpr bool operator <=(const Time &t) const {
+        return time() <= t.time();
     }
     
-    constexpr bool operator ==(const Time &time) const {
-        return tt == time.tt;
+    constexpr bool operator ==(const Time &t) const {
+        return time() == t.time();
     }
     
-    constexpr bool operator >(const Time &time) const {
-        return tt > time.tt;
+    constexpr bool operator >(const Time &t) const {
+        return time() > t.time();
     }
     
-    constexpr bool operator >=(const Time &time) const {
-        return tt >= time.tt;
+    constexpr bool operator >=(const Time &t) const {
+        return time() >= t.time();
     }
 };
 
@@ -324,14 +327,14 @@ constexpr auto OPENING_HOUR = 12;
 constexpr auto CUSTOMER_ENTRIES_PER_PAGE = 10;
 
 void time_now(Time &t) {
-    t.tt = time(nullptr);
-    t.t = *localtime(&t.tt);
+    t.time_int = time(nullptr);
+    t.raw() = *localtime(&t.time());
 }
 
 static array<char, 128> format_string = {};
 
 #define define_format(name, format) const char *name(const Time &t) { \
-    strftime(format_string.data(), format_string.size(), format, &t.t); \
+    strftime(format_string.data(), format_string.size(), format, &t.raw()); \
     return format_string.data(); \
 }
 
@@ -542,12 +545,12 @@ struct Cache {
             cout << endl;
     }
 
-    void print_day_schedule(const Time &date) {
+    void print_schedule() {
         constexpr ConstStr LABEL = "Experts";
         constexpr auto COLUMN_SIZE = max(LABEL.len, MAX_EXPERT_NAME_LENGTH);
         constexpr auto CELL_SIZE = 5;
         
-        cout << "Schedule for " << format_date(date) << endl << endl;
+        cout << "Schedule for " << format_date(booking.time) << endl << endl;
         cout << setfill(' ') << setw(COLUMN_SIZE) << left << LABEL;
         
         for (int i = 0; i < WORK_HOURS; i++) {
@@ -570,7 +573,7 @@ struct Cache {
             for (int j = 0; j < WORK_HOURS; j++) {
                 cout << '|';
                 
-                center<CELL_SIZE, 1>([&]() { cout << (schedule[date][i][j] ? "✗" : "✓"); });
+                center<CELL_SIZE, 1>([&]() { cout << (schedule[booking.time][i][j] ? "✗" : "✓"); });
             }
             
             cout << endl;
@@ -581,7 +584,7 @@ struct Cache {
         string s { format_time(booking.time) };
         const Time end_time = booking.time.copy().set_hour(booking.time.hour() + (service_type == TREATMENT ? 2 : 1));
         
-        strftime(format_string.data(), format_string.size(), "~%T", &end_time.t);
+        strftime(format_string.data(), format_string.size(), "~%T", &end_time.raw());
         
         s += format_string.data();
         
@@ -921,7 +924,7 @@ State ui(const State state, bool &validation, Cache &cache)
             
             
         case BOOK_TREATMENT:
-            cache.print_day_schedule(cache.booking.time);
+            cache.print_schedule();
             
             cout << endl << "Select a time to book" << endl;
             
@@ -940,7 +943,7 @@ State ui(const State state, bool &validation, Cache &cache)
         
         
         case BOOK_CONSULTATION:
-            cache.print_day_schedule(cache.booking.time);
+            cache.print_schedule();
             
             cout << endl << "Select a time to book" << endl;
             
@@ -1033,7 +1036,7 @@ State ui(const State state, bool &validation, Cache &cache)
             
             auto &sched = (cache.service_type == TREATMENT ? cache.treatment_schedule : cache.consultation_schedule);
             
-            sched[cache.booking.expert].insert({cache.booking.time.tt, id});
+            sched[cache.booking.expert].insert({cache.booking.time.time(), id});
             
             cache.booking.service_type = cache.service_type;
             cache.booking_database.insert({std::move(id), cache.booking});
@@ -1079,10 +1082,7 @@ State ui(const State state, bool &validation, Cache &cache)
             if (has_key(cache.booking_database, id)) {
                 const auto &appointment = cache.booking_database[id];
                 
-                cache.booking.time = appointment.time;
-                cache.service_type = appointment.service_type;
-                
-                cout << "Your appointment is a " << SERVICES[appointment.service].name << " " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " during " << cache.format_booking_time() << endl;
+                cout << "Your appointment is a " << SERVICES[appointment.service].name << " " << (appointment.service_type == TREATMENT ? "treatment" : "consultation") << " during " << cache.format_booking_time() << endl;
                 cout << "Expert in charge: " << EXPERTS[appointment.expert].name << endl;
                 cout << "Service description: " << SERVICES[appointment.service].description << endl;
             }
