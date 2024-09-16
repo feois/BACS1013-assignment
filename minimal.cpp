@@ -1,5 +1,6 @@
 #include <iostream>
 #include <iomanip>
+#include <fstream>
 #include <string>
 #include <cstdlib>
 
@@ -15,6 +16,7 @@ void clear() {
 
 #define DAY_COUNT 30
 #define EXPERT_COUNT 3
+#define SERVICE_COUNT 3
 #define WORK_HOUR_COUNT 6
 #define OPENING_HOUR 12
 #define CUSTOMER_ENTRIES_PER_PAGE 10
@@ -44,9 +46,6 @@ enum State {
     APPOINTMENTS,
     
     BOOKING,
-    BOOK_VIEW,
-    BOOK_VIEW_PREV_MONTH,
-    BOOK_VIEW_NEXT_MONTH,
     BOOK_SELECT_DAY,
     BOOK_SELECT_SERVICE_TYPE,
     BOOK_TREATMENT,
@@ -97,10 +96,9 @@ struct User {
     string phone_number;
     string username;
     string password;
-    int index;
 };
 
-struct ExpertData {
+struct ExpertSchedule {
     string treatment_schedule[DAY_COUNT][WORK_HOUR_COUNT];
     string consultation_schedule[DAY_COUNT][WORK_HOUR_COUNT];
 };
@@ -116,7 +114,7 @@ struct Booking {
 
 struct Cache {
     bool schedule[DAY_COUNT][WORK_HOUR_COUNT][EXPERT_COUNT];
-    ExpertData experts[EXPERT_COUNT];
+    ExpertSchedule experts[EXPERT_COUNT];
     User user;
     Booking booking;
     ServiceType service_type;
@@ -131,6 +129,12 @@ struct Option {
     State link;
 };
 
+const struct {
+    string CUSTOMER = "customer.dat";
+    string BOOKING = "booking.dat";
+    string CACHE = "cache.dat";
+} FILES;
+
 const string DAYS_OF_A_WEEK[] = {
     "Sunday",
     "Monday",
@@ -141,6 +145,16 @@ const string DAYS_OF_A_WEEK[] = {
     "Saturday",
 };
 
+const string SHORT_DAYS_OF_A_WEEK[] = {
+    "Sun",
+    "Mon",
+    "Tue",
+    "Wed",
+    "Thu",
+    "Fri",
+    "Sat",
+};
+
 const Service SERVICES[] = {
     {"Skin Care", "blablabla", 100, 200},
     {"Face Makeup", "lorem ipsum", 123, 456},
@@ -148,12 +162,12 @@ const Service SERVICES[] = {
 };
 
 const User EXPERTS[] = {
-    { "Ang Zi En", FEMALE, "999", "aze", "12345678", 0 },
-    { "Wai Chee Han", MALE, "999", "wch", "12345678", 1 },
-    { "Wilson Ang Shao En", MALE, "+6011-7243 3165", "wase", "12345678", 2 },
+    { "Ang Zi En", FEMALE, "999", "aze", "12345678" },
+    { "Wai Chee Han", MALE, "999", "wch", "12345678" },
+    { "Wilson Ang Shao En", MALE, "+6011-7243 3165", "wase", "12345678" },
 };
 
-const User ADMIN = { "Administrator", MALE, "-", "admin", "12345678", -1 };
+const User ADMIN = { "Administrator", MALE, "-", "admin", "12345678" };
 
 void coutfill(char c, int n) {
     if (n > 0)
@@ -165,30 +179,42 @@ void line() {
     cout << endl;
 }
 
-void center(int line_width, const string &s) {
-    if (s.length() > line_width)
+ostream &center(int target_length, int string_length, const string &s) {
+    if (string_length > target_length)
         cout << s;
     else {
-        int padding = line_width - s.length();
+        int padding = target_length - string_length;
         int left = padding / 2;
         int right = padding - left;
         
         coutfill(' ', left);
+        
         cout << s;
+        
         coutfill(' ', right);
     }
+    
+    return cout;
 }
 
 string format_date(int day) {
-    return DAYS_OF_A_WEEK[day % 7] + " " + to_string(day) + " September 2024";
+    return DAYS_OF_A_WEEK[day % 7] + " " + to_string(day + 1) + " September 2024";
 }
 
 string format_time(int day, int hour) {
     return format_date(day) + " " + to_string(hour + OPENING_HOUR) + ":00";
 }
 
-string format_booking_time(const Cache &cache) {
-    return format_time(cache.booking.day, cache.booking.hour) + "~" + to_string(cache.booking.hour + OPENING_HOUR + (cache.booking.service_type == TREATMENT ? 2 : 1)) + ":00";
+string format_booking_time(const Booking &booking) {
+    return format_time(booking.day, booking.hour) + "~" + to_string(booking.hour + OPENING_HOUR + (booking.service_type == TREATMENT ? 2 : 1)) + ":00";
+}
+
+bool validate_username(const string &s) {
+    for (char c : s)
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'))
+            return false;
+    
+    return true;
 }
 
 bool check_availability(const Cache &cache, ServiceType type, int day, int hour, int expert) {
@@ -217,36 +243,241 @@ bool check_availability(const Cache &cache, ServiceType type, int day, int hour,
     }
 }
 
-bool find_customer(const string &username, User &user) {
-    // todo
+int read_int(ifstream &in) {
+    string s;
+    int i;
+    in >> i;
+    getline(in, s);
+    return i;
 }
 
-User find_customer(int index) {
-    // todo
+bool read_customer(ifstream &in, User &customer) {
+    if (getline(in, customer.username)) {
+        int gender;
+        string s;
+        
+        getline(in, customer.password);
+        getline(in, customer.name);
+        
+        customer.gender = Gender(read_int(in));
+        
+        getline(in, customer.phone_number);
+        
+        return true;
+    }
+    
+    return false;
 }
 
-void save_user_data(const Cache &cache) {
-    // todo
+void add_customer(const User &user) {
+    ofstream out;
+    
+    out.open(FILES.CUSTOMER, ios_base::app);
+    
+    out << user.username << endl;
+    out << user.password << endl;
+    out << user.name << endl;
+    out << user.gender << endl;
+    out << user.phone_number << endl;
+    
+    out.close();
 }
 
-void save_booking(string id, const Cache &cache) {
+bool find_customer(const string &username, User &customer) {
+    ifstream in;
+    
+    in.open(FILES.CUSTOMER);
+    
+    while (read_customer(in, customer))
+        if (customer.username == username) 
+            break;
+    
+    in.close();
+    return customer.username == username;
+}
+
+bool read_booking(ifstream &in, string &id, Booking &booking) {
+    if (getline(in, id)) {
+        getline(in, booking.customer_username);
+        
+        booking.day = read_int(in);
+        booking.hour = read_int(in);
+        booking.expert = read_int(in);
+        booking.service = read_int(in);
+        booking.service_type = ServiceType(read_int(in));
+        
+        return true;
+    }
+    
+    return false;
+}
+
+void add_booking(const string &id, const Cache &cache) {
     const User &customer = cache.user;
     const Booking &booking = cache.booking;
-    // todo
-    // cache.login_user->customer_data->booking_history.insert({cache.booking.time.time(), cache.booking});
-    // cache.login_user->customer_data->total_payment += cache.service_type == TREATMENT ? service.treatment_fee : service.consultation_fee;
+    
+    ofstream out;
+    
+    out.open(FILES.BOOKING, ios_base::app);
+    
+    out << id << endl;
+    out << booking.customer_username << endl;
+    out << booking.day << endl;
+    out << booking.hour << endl;
+    out << booking.expert << endl;
+    out << booking.service << endl;
+    out << booking.service_type << endl;
+    
+    out.close();
 }
 
-bool find_appointment(string id, Booking &appointment) {
-    // todo
+bool find_appointment(const string &id, Booking &appointment) {
+    ifstream in;
+    string booking_id;
+    
+    in.open(FILES.BOOKING);
+    
+    while (read_booking(in, booking_id, appointment))
+        if (booking_id == id)
+            break;
+    
+    in.close();
+    return booking_id == id;
 }
 
-void print_calendar() {
-    // todo
+void save_cache(const Cache &cache) {
+    ofstream out;
+    
+    out.open(FILES.CACHE);
+    
+    out << cache.new_booking_id << endl;
+    out << cache.customer_count << endl;
+    
+    for (int day = 0; day < DAY_COUNT; day++)
+        for (int hour = 0; hour < WORK_HOUR_COUNT; hour++)
+            for (int expert = 0; expert < EXPERT_COUNT; expert++)
+                out << cache.schedule[day][hour][expert];
+    
+    out << endl;
+    
+    for (int expert = 0; expert < EXPERT_COUNT; expert++) {
+        for (int day = 0; day < DAY_COUNT; day++)
+            for (int hour = 0; hour < WORK_HOUR_COUNT; hour++)
+                out << cache.experts[expert].consultation_schedule[day][hour] << ':';
+        
+        out << endl;
+        
+        for (int day = 0; day < DAY_COUNT; day++)
+            for (int hour = 0; hour < WORK_HOUR_COUNT; hour++)
+                out << cache.experts[expert].treatment_schedule[day][hour] << ':';
+        
+        out << endl;
+    }
+}
+
+void read_cache(Cache &cache) {
+    ifstream in;
+    string s;
+    
+    in.open(FILES.CACHE);
+    
+    if (in.is_open()) {
+        cache.new_booking_id = read_int(in);
+        cache.customer_count = read_int(in);
+        
+        for (int day = 0; day < DAY_COUNT; day++)
+            for (int hour = 0; hour < WORK_HOUR_COUNT; hour++)
+                for (int expert = 0; expert < EXPERT_COUNT; expert++) {
+                    char c;
+                    in >> c;
+                    cache.schedule[day][hour][expert] = c == '1';
+                }
+        
+        getline(in, s);
+    
+        for (int expert = 0; expert < EXPERT_COUNT; expert++) {
+            for (int day = 0; day < DAY_COUNT; day++)
+                for (int hour = 0; hour < WORK_HOUR_COUNT; hour++)
+                    getline(in, cache.experts[expert].consultation_schedule[day][hour], ':');
+            
+            getline(in, s);
+            
+            for (int day = 0; day < DAY_COUNT; day++)
+                for (int hour = 0; hour < WORK_HOUR_COUNT; hour++)
+                    getline(in, cache.experts[expert].treatment_schedule[day][hour], ':');
+            
+            getline(in, s);
+        }
+        
+        in.close();
+    }
+}
+
+void print_calendar(const Cache &cache) {
+    const int CELL_WIDTH = 6;
+    
+    center(CELL_WIDTH * 7, 8, "Sep 2024") << endl;
+    
+    for (const string &day : SHORT_DAYS_OF_A_WEEK)
+        center(CELL_WIDTH - 1, 3, day) << ' ';
+    
+    cout << endl;
+    
+    for (int week = 0; week < 5; week++) {
+        for (int day = 0; day < (week == 5 ? 2 : 7); day++) {
+            cout << setw(2) << week * 7 + day + 1 << ' ';
+            cout << (check_availability(cache, CONSULTATION, day, -1, -1) ? 'C' : '-');
+            cout << (check_availability(cache, TREATMENT, day, -1, -1) ? 'T' : '-');
+            cout << ' ';
+        }
+        
+        cout << endl;
+    }
+    
+    cout << endl;
+    cout << "C means consultation is available to book" << endl;
+    cout << "T means treatment is available to book" << endl;
 }
 
 void print_schedule(const Cache &cache) {
-    // todo
+    int longest_name = 0;
+    
+    for (const User &expert : EXPERTS)
+        if (expert.name.length() > longest_name)
+            longest_name = expert.name.length();
+    
+    const string LABEL = "Experts";
+    const int COLUMN_SIZE = max(static_cast<int>(LABEL.length()), longest_name);
+    const int CELL_SIZE = 5;
+    
+    cout << "Schedule for " << format_date(cache.booking.day) << endl << endl;
+    cout << setfill(' ') << setw(COLUMN_SIZE) << left << LABEL;
+    
+    for (int i = 0; i < WORK_HOUR_COUNT; i++) {
+        cout << '|' << 12 + i << ":00";
+    }
+    
+    cout << endl;
+    
+    for (int expert = 0; expert < EXPERT_COUNT; expert++) {
+        coutfill('-', COLUMN_SIZE);
+        
+        for (int hour = 0; hour < WORK_HOUR_COUNT; hour++) {
+            cout << '+';
+            
+            coutfill('-', CELL_SIZE);
+        }
+        
+        cout << endl << setfill(' ') << setw(COLUMN_SIZE) << left << EXPERTS[expert].name;
+        
+        for (int hour = 0; hour < WORK_HOUR_COUNT; hour++) {
+            cout << '|';
+            
+            center(CELL_SIZE, 1, cache.schedule[cache.booking.day][hour][expert] ? "✗" : "✓");
+        }
+        
+        cout << endl;
+    }
 }
 
 int input_options(const Option options[], int option_count, bool &validation) {
@@ -262,9 +493,8 @@ int input_options(const Option options[], int option_count, bool &validation) {
     int response;
     
     cout << endl << "Enter option: ";
-    cin >> response;
     
-    if (cin.good()) {
+    if (cin >> response) {
         if (response > 0 && response <= option_count) {
             validation = true;
             return response - 1;
@@ -276,6 +506,8 @@ int input_options(const Option options[], int option_count, bool &validation) {
     }
     
     validation = false;
+    
+    return 0;
 }
 
 int ui(int state, bool &validation, Cache &cache) {
@@ -283,6 +515,13 @@ int ui(int state, bool &validation, Cache &cache) {
     int option_count = 0;
     
     clear();
+    cout << "COMPANY LOGO" << endl;
+    line();
+    
+    if (!cache.user.username.empty()) {
+        cout << "Currently login as " << cache.user.username << " (" << cache.user.name << ")" << endl;
+        line();
+    }
     
     switch (state) {
         case MAIN_MENU:
@@ -315,67 +554,78 @@ int ui(int state, bool &validation, Cache &cache) {
         {
             string username;
             
-            cout << "Login or Register" << endl << endl;
-            cout << "Username: ";
+            cout << "Login or Register" << endl;
             
-            cin >> username;
-            
-            if (find_customer(username, cache.user)) {
-                string password;
+            if (validation) {
+                cout << endl << "Username: ";
                 
-                cout << "Password: ";
+                cin >> username;
                 
-                cin >> password;
-                
-                if (password == cache.user.password)
-                    return CUSTOMER_MENU;
-                
-                cout << endl << "Wrong password" << endl;
-                cache.user = {}; // clear out cache for security purpose
-                break;
-            }
-            else {
-                string response;
-                
-                cout << endl << "This username does not exist. Do you wish to register a new account with this username? (Y/n)" << endl;
-                cin >> response;
-                
-                if (response == "n" || response == "N")
-                    return MAIN_MENU;
-                
-                cout << endl << endl << "Enter your name: ";
-                cin >> cache.user.name;
-                cout << "Enter your gender (M/F): ";
-                cin >> response;
-                
-                if (response == "m" || response == "M")
-                    cache.user.gender = MALE;
-                else if (response == "f" || response == "F")
-                    cache.user.gender = FEMALE;
+                if (!validate_username(username))
+                    cout << endl << "Invalid username!" << endl;
+                else if (find_customer(username, cache.user)) {
+                    string password;
+                    
+                    cout << "Password: ";
+                    
+                    cin >> password;
+                    
+                    if (password == cache.user.password)
+                        return CUSTOMER_MENU;
+                    
+                    cout << endl << "Incorrect password!" << endl;
+                    cache.user = {}; // clear out cache for security purpose
+                    break;
+                }
                 else {
+                    string response;
+                    
                     cache.user = {};
-                    cout << endl << "Invalid input!" << endl;
-                    break;
+                    
+                    cout << endl << "This username does not exist. Do you wish to register a new account with this username? (Y/n) ";
+                    cin >> response;
+                    
+                    if (response == "n" || response == "N")
+                        return MAIN_MENU;
+                    else if (response != "y" && response != "Y")
+                        break;
+                    
+                    cout << endl << "Enter your name: ";
+                    cin >> cache.user.name;
+                    cout << "Enter your gender (M/F): ";
+                    cin >> response;
+                    
+                    if (response == "m" || response == "M")
+                        cache.user.gender = MALE;
+                    else if (response == "f" || response == "F")
+                        cache.user.gender = FEMALE;
+                    else {
+                        cache.user = {};
+                        cout << endl << "Invalid input!" << endl;
+                        break;
+                    }
+                    
+                    cout << "Enter your phone number (numbers only): ";
+                    cin >> cache.user.phone_number;
+                    
+                    if (cache.user.phone_number.length() > 11 || cache.user.phone_number.find_first_not_of("0123456789-+") != cache.user.phone_number.npos) {
+                        cache.user = {};
+                        cout << endl << "Invalid input!" << endl;
+                        break;
+                    }
+                    
+                    cout << "Enter your password: ";
+                    cin >> cache.user.password;
+                    
+                    cache.user.username = username;
+                    
+                    add_customer(cache.user);
+                    
+                    return CUSTOMER_MENU;
                 }
-                
-                cout << endl << "Enter your phone number (numbers only): ";
-                cin >> cache.user.phone_number;
-                
-                if (cache.user.phone_number.length() > 11 || cache.user.phone_number.find_first_not_of("0123456789-+") != cache.user.phone_number.npos) {
-                    cache.user = {};
-                    cout << endl << "Invalid input!" << endl;
-                    break;
-                }
-                
-                cout << "Enter your password: ";
-                cin >> cache.user.password;
-                
-                cache.user.username = username;
-                
-                save_user_data(cache);
-                
-                return CUSTOMER_MENU;
             }
+            
+            break;
         }
             
             
@@ -402,16 +652,20 @@ int ui(int state, bool &validation, Cache &cache) {
             cache.booking.service = -1;
             
             {
-				Option options[CUSTOMER_MENU] = {};
+				Option options[SERVICE_COUNT + 1] = {};
 				
-				for (int i = 0; i < CUSTOMER_MENU; i++)
-					if (true)
-						options[option_count++].description = SERVICES[i].name;
+				for (const Service &service : SERVICES)
+					options[option_count++].description = service.name;
 				
-				int response = input_options(options, option_count, validation);
+                options[option_count].description = "Return to main menu";
+                
+				int response = input_options(options, option_count + 1, validation);
 				
 				if (!validation)
 					return state;
+                
+                if (response == option_count)
+                    return CUSTOMER_MENU;
 				
                 cache.booking.service = response;
                 return VIEW_SERVICE;
@@ -461,7 +715,7 @@ int ui(int state, bool &validation, Cache &cache) {
 			options = BOOKING_OPTIONS;
 			option_count = sizeof(BOOKING_OPTIONS) / sizeof(Option);
         
-            print_calendar();
+            print_calendar(cache);
             break;
             
             
@@ -469,7 +723,7 @@ int ui(int state, bool &validation, Cache &cache) {
         {
             string input;
             
-            print_calendar();
+            print_calendar(cache);
             
             if (!validation)
                 cout << endl << "Please input a valid day!" << endl;
@@ -519,16 +773,21 @@ int ui(int state, bool &validation, Cache &cache) {
             cout << endl << "Select a time to book" << endl;
             
             {
-				Option options[BOOK_CANCEL] = {};
+				Option options[WORK_HOUR_COUNT] = {};
 				
-				for (int i = 0; i < BOOK_CANCEL; i++)
+				for (int i = 0; i < WORK_HOUR_COUNT - 1; i++)
 					if (check_availability(cache, TREATMENT, cache.booking.day, i, -1))
 						options[option_count++].description = to_string(OPENING_HOUR + i) + ":00~" + to_string(OPENING_HOUR + i + 2) + ":00";
 				
-				int response = input_options(options, option_count, validation);
+                options[option_count].description = "Cancel";
+                
+				int response = input_options(options, option_count + 1, validation);
 				
 				if (!validation)
 					return state;
+                
+                if (response == option_count)
+                    return BOOK_CANCEL;
 				
                 cache.service_type = TREATMENT;
                 cache.booking.hour = response;
@@ -539,19 +798,24 @@ int ui(int state, bool &validation, Cache &cache) {
         case BOOK_CONSULTATION:
             print_schedule(cache);
             
-            cout << endl << "Select a time to book" << endl;
+            cout << endl << "Select a time to book + 1" << endl;
             
             {
-				Option options[BOOK_CANCEL] = {};
+				Option options[WORK_HOUR_COUNT + 1] = {};
 				
-				for (int i = 0; i < BOOK_CANCEL; i++)
+				for (int i = 0; i < WORK_HOUR_COUNT; i++)
 					if (check_availability(cache, CONSULTATION, cache.booking.day, i, -1))
 						options[option_count++].description = to_string(OPENING_HOUR + i) + ":00~" + to_string(OPENING_HOUR + i + 1) + ":00";
 				
-				int response = input_options(options, option_count, validation);
+                options[option_count].description = "Cancel";
+                
+				int response = input_options(options, option_count + 1, validation);
 				
 				if (!validation)
 					return state;
+                
+                if (response == option_count)
+                    return BOOK_CANCEL;
 				
                 cache.service_type = CONSULTATION;
                 cache.booking.hour = response;
@@ -560,20 +824,26 @@ int ui(int state, bool &validation, Cache &cache) {
         
         
         case BOOK_SELECT_EXPERT:
-            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << format_booking_time(cache) << endl;
+            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << format_booking_time(cache.booking) << endl;
             cout << endl << "Select an expert to book" << endl;
             
             {
-				Option options[BOOK_CANCEL] = {};
+                
+				Option options[EXPERT_COUNT + 1] = {};
 				
-				for (int i = 0; i < BOOK_CANCEL; i++)
+				for (int i = 0; i < EXPERT_COUNT; i++)
 					if (check_availability(cache, cache.service_type, cache.booking.day, cache.booking.hour, i))
 						options[option_count++].description = "Expert " + EXPERTS[i].name;
 				
-				int response = input_options(options, option_count, validation);
+                options[option_count].description = "Cancel";
+                
+				int response = input_options(options, option_count + 1, validation);
 				
 				if (!validation)
 					return state;
+                
+                if (response == option_count)
+                    return BOOK_CANCEL;
 				
                 cache.booking.expert = response;
                 return BOOK_SELECT_SERVICE;
@@ -584,19 +854,23 @@ int ui(int state, bool &validation, Cache &cache) {
             if (cache.booking.service != -1)
                 return BOOK_CONFIRM;
             
-            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << format_booking_time(cache) << endl;
+            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << format_booking_time(cache.booking) << endl;
             
             {
-				Option options[BOOK_CANCEL] = {};
+				Option options[SERVICE_COUNT + 1] = {};
 				
-				for (int i = 0; i < BOOK_CANCEL; i++)
-					if (true)
-						options[option_count++].description = "Service " + SERVICES[i].name;
+				for (const Service &service: SERVICES)
+					options[option_count++].description = "Service " + service.name;
 				
-				int response = input_options(options, option_count, validation);
+                options[option_count].description = "Cancel";
+                
+				int response = input_options(options, option_count + 1, validation);
 				
 				if (!validation)
 					return state;
+                
+                if (response == option_count)
+                    return BOOK_CANCEL;
 				
                 cache.booking.service = response;
                 return BOOK_CONFIRM;
@@ -619,7 +893,7 @@ int ui(int state, bool &validation, Cache &cache) {
             cout << "Name: " << customer.name << endl;
             cout << "Gender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
             cout << "Contact number: " << customer.phone_number << endl << endl;
-            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << format_booking_time(cache) << endl;
+            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << format_booking_time(cache.booking) << endl;
             cout << "Expert: " << EXPERTS[cache.booking.expert].name << endl;
             cout << "Service: " << service.name << endl;
             cout << service.description << endl;
@@ -651,20 +925,21 @@ int ui(int state, bool &validation, Cache &cache) {
             string id = "B" + to_string(cache.new_booking_id);
             
             Booking &booking = cache.booking;
-            ExpertData &data = cache.experts[cache.booking.expert];
+            ExpertSchedule &schedule = cache.experts[cache.booking.expert];
             
-            (cache.service_type == TREATMENT ? data.treatment_schedule : data.consultation_schedule)[booking.day][booking.hour] = id;
+            (cache.service_type == TREATMENT ? schedule.treatment_schedule : schedule.consultation_schedule)[booking.day][booking.hour] = id;
             
+            booking.customer_username = cache.user.username;
             booking.service_type = cache.service_type;
             
-            save_booking(std::move(id), cache);
+            add_booking(std::move(id), cache);
             
             for (int i = 0; i < (cache.service_type == TREATMENT ? 2 : 1); i++)
                 cache.schedule[cache.booking.day][cache.booking.hour + i][cache.booking.expert] = true;
             
             cout << "Successfully booked the appointment!" << endl;
             cout << endl << "Appointment id: B" << cache.new_booking_id++ << endl;
-            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << format_booking_time(cache) << endl;
+            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << format_booking_time(cache.booking) << endl;
             cout << "Expert: " << EXPERTS[booking.expert].name << endl;
             cout << "Service: " << service.name << endl;
             cout << service.description << endl;
@@ -681,7 +956,7 @@ int ui(int state, bool &validation, Cache &cache) {
             cache.booking.hour = -1;
             cache.booking.service = -1;
             cache.booking.expert = -1;
-            return BOOK_VIEW;
+            return BOOKING;
         
         
         case APPOINTMENTS:
@@ -700,12 +975,12 @@ int ui(int state, bool &validation, Cache &cache) {
             cout << endl;
             
             if (find_appointment(id, appointment)) {
-                cout << "Your appointment is a " << SERVICES[appointment.service].name << " " << (appointment.service_type == TREATMENT ? "treatment" : "consultation") << " during " << format_booking_time(cache) << endl;
+                cout << "Your appointment is a " << SERVICES[appointment.service].name << " " << (appointment.service_type == TREATMENT ? "treatment" : "consultation") << " during " << format_booking_time(appointment) << endl;
                 cout << "Expert in charge: " << EXPERTS[appointment.expert].name << endl;
                 cout << "Service description: " << SERVICES[appointment.service].description << endl;
             }
             else {
-                cout << "Invalid id" << endl;
+                cout << "Id not found!" << endl;
             }
             
             break;
@@ -726,20 +1001,25 @@ int ui(int state, bool &validation, Cache &cache) {
             cout << "Username: ";
             cin >> username;
             
+            if (!validate_username(username)) {
+                cout << "Invalid username!" << endl;
+                break;
+            }
             if (username == ADMIN.username)
                 cache.user = ADMIN;
             else {
-                cache.user.index = -1;
+                bool username_found = false;
                 
                 for (const User &expert : EXPERTS) {
                     if (username == expert.username) {
                         cache.user = expert;
+                        username_found = true;
                         break;
                     }
                 }
                 
-                if (cache.user.index == -1) {
-                    cout << endl << "Invalid username" << endl;
+                if (!username_found) {
+                    cout << endl << "Username not found!" << endl;
                     break;
                 }
             }
@@ -750,7 +1030,7 @@ int ui(int state, bool &validation, Cache &cache) {
             if (password == cache.user.password)
                 return STAFF_MENU;
             else
-                cout << endl << "Invalid password" << endl;
+                cout << endl << "Incorrect password!" << endl;
             
             cache.user = {};
             break;
@@ -793,54 +1073,59 @@ int ui(int state, bool &validation, Cache &cache) {
 			options = SCHEDULE_VIEW_OPTIONS;
 			option_count = sizeof(SCHEDULE_VIEW_OPTIONS) / sizeof(Option);
         {
-            if (cache.user.index == ADMIN.index)
+            if (cache.user.username == ADMIN.username)
                 return INVALID_USER;
             
-            const ExpertData &data = cache.experts[cache.user.index];
+            int index = 0;
+            
+            for (const User &expert : EXPERTS)
+                if (expert.username == cache.user.username)
+                    break;
+                else
+                    index++;
+            
+            int day_offset = cache.schedule_view_week * 7;
+            int day_count = cache.schedule_view_week == 4 ? 2 : 7;
+            
+            const ExpertSchedule &schedule = cache.experts[index];
             
             const int LABEL_SIZE = 5;
             const int CELL_SIZE = 5;
             const int LINE_WIDTH = LABEL_SIZE + 7 * (CELL_SIZE + 1);
-            const string SEPARATOR = " ~ ";
             
-            string week_start = format_date(cache.schedule_view_week * 7);
-            string week_end = format_date(cache.schedule_view_week * 7 + 7);
+            string s = format_date(cache.schedule_view_week * 7) + " ~ " + format_date(cache.schedule_view_week * 7 + day_count - 1);
             
-            center(week_start.length() + SEPARATOR.length() + week_end.length(), week_start + SEPARATOR + week_end);
+            center(LINE_WIDTH, s.length(), s) << endl;
             
-            cout << endl;
             coutfill(' ', 5);
             
-            for (const string &weekday : DAYS_OF_A_WEEK) {
+            for (int day = 0; day < day_count; day++) {
                 cout << '|';
-                center(5, weekday);
+                center(5, 3, SHORT_DAYS_OF_A_WEEK[day]);
             }
             
             cout << endl;
             
-            int day = cache.schedule_view_week * 7;
             
             for (int hour = 0; hour < WORK_HOUR_COUNT; hour++) {
                 coutfill('-', LABEL_SIZE);
                 
-                for (int j = 0; j < 7; j++) {
+                for (int j = 0; j < day_count; j++) {
                     cout << '+';
                     coutfill('-', CELL_SIZE);
                 }
                 
                 cout << endl << OPENING_HOUR + hour << ":00";
                 
-                for (int d = 0; d < 7; d++) {
+                for (int day = 0; day < day_count; day++) {
                     const string *id = nullptr;
+                    const string (&day_schedule)[WORK_HOUR_COUNT] = (cache.service_type == TREATMENT ? schedule.treatment_schedule : schedule.consultation_schedule)[day_offset + day];
                     
-                    if (cache.service_type == TREATMENT) {
-                        if (!data.treatment_schedule[day + d][hour].empty())
-                            id = &data.treatment_schedule[day + d][hour];
-                        else if (hour > 0 && !data.treatment_schedule[day + d][hour - 1].empty())
-                            id = &data.treatment_schedule[day + d][hour - 1];
-                    }
-                    else if (!data.consultation_schedule[day + d][hour].empty())
-                        id = &data.consultation_schedule[day + d][hour];
+                    if (!day_schedule[hour].empty())
+                        id = &day_schedule[hour];
+                    
+                    if (cache.service_type == TREATMENT && hour > 0 && !day_schedule[hour - 1].empty())
+                        id = &day_schedule[hour - 1];
                     
                     cout << '|' << (id == nullptr ? "  -  " : *id);
                 }
@@ -886,11 +1171,18 @@ int ui(int state, bool &validation, Cache &cache) {
                 
                 int offset = cache.customer_view_page * CUSTOMER_ENTRIES_PER_PAGE;
                 
-                for (int i = 0; i < CUSTOMER_ENTRIES_PER_PAGE && offset + i < cache.customer_count; i++) {
-                    User customer = find_customer(i); // todo
-                    
+                ifstream in;
+                User customer;
+                
+                in.open(FILES.CUSTOMER);
+                
+                for (int i = 0; i < offset; i++)
+                    read_customer(in, customer);
+                
+                for (int i = 0; i < CUSTOMER_ENTRIES_PER_PAGE && read_customer(in, customer); i++)
                     cout << offset + i + 1 << ". " << customer.name << " (" << (customer.gender == MALE ? "Male" : "Female") << ") 📞 " << customer.phone_number << endl;
-                }
+                
+                in.close();
             }
             else
                 cout << "Customer list is empty" << endl;
@@ -1006,7 +1298,7 @@ int ui(int state, bool &validation, Cache &cache) {
         
         
         case EXIT:
-            cout << "test";
+            cout << "Thank you for using our service" << endl;
             return EXIT;
         
         
@@ -1026,9 +1318,13 @@ int main() {
     
     cache.new_booking_id = 1000;
     
+    read_cache(cache);
+    
     while ((state = ui(state, validation, cache)) != EXIT);
     
     ui(EXIT, validation, cache);
+    
+    save_cache(cache);
     
     return 0;
 }

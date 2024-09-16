@@ -340,6 +340,17 @@ static array<char, 128> format_string = {};
 
 define_format(format_time, "%A %e %B %G (%F) %T");
 define_format(format_date, "%A %e %B %G (%F)");
+    
+string format_booking_time(const Booking &booking) {
+    string s { format_time(booking.time) };
+    const Time end_time = booking.time.copy().set_hour(booking.time.hour() + (booking.service_type == TREATMENT ? 2 : 1));
+    
+    strftime(format_string.data(), format_string.size(), "~%T", &end_time.raw());
+    
+    s += format_string.data();
+    
+    return s;
+}
 
 template<char C, size_t N>
 void coutfill() {
@@ -578,17 +589,6 @@ struct Cache {
             
             cout << endl;
         }
-    }
-    
-    string format_booking_time() const {
-        string s { format_time(booking.time) };
-        const Time end_time = booking.time.copy().set_hour(booking.time.hour() + (service_type == TREATMENT ? 2 : 1));
-        
-        strftime(format_string.data(), format_string.size(), "~%T", &end_time.raw());
-        
-        s += format_string.data();
-        
-        return s;
     }
 };
 
@@ -962,7 +962,7 @@ State ui(const State state, bool &validation, Cache &cache)
         
         
         case BOOK_SELECT_EXPERT:
-            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << cache.format_booking_time() << endl;
+            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << format_booking_time(cache.booking) << endl;
             cout << endl << "Select an expert to book" << endl;
             
             return custom_input<EXPERTS.size(), BOOK_CANCEL>(
@@ -981,7 +981,7 @@ State ui(const State state, bool &validation, Cache &cache)
             if (cache.booking.service != -1)
                 redirect(BOOK_CONFIRM)
             
-            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << cache.format_booking_time() << endl;
+            cout << "Booking a " << (cache.service_type == TREATMENT ? "treatment" : "consultation") << " on " << format_booking_time(cache.booking) << endl;
             
             return custom_input<SERVICES.size(), BOOK_CANCEL>(
                 state,
@@ -1008,7 +1008,7 @@ State ui(const State state, bool &validation, Cache &cache)
             cout << "Name: " << customer.name << endl;
             cout << "Gender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
             cout << "Contact number: " << customer.phone_number << endl << endl;
-            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << cache.format_booking_time() << endl;
+            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << format_booking_time(cache.booking) << endl;
             cout << "Expert: " << EXPERTS[cache.booking.expert].name << endl;
             cout << "Service: " << service.name << endl;
             cout << service.description << endl;
@@ -1051,7 +1051,7 @@ State ui(const State state, bool &validation, Cache &cache)
             
             cout << "Successfully booked the appointment!" << endl;
             cout << endl << "Appointment id: B" << cache.new_booking_id++ << endl;
-            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << cache.format_booking_time() << endl;
+            cout << (cache.service_type == TREATMENT ? "Treatment" : "Consultation") << " during " << format_booking_time(cache.booking) << endl;
             cout << "Expert: " << EXPERTS[cache.booking.expert].name << endl;
             cout << "Service: " << service.name << endl;
             cout << service.description << endl;
@@ -1082,7 +1082,7 @@ State ui(const State state, bool &validation, Cache &cache)
             if (has_key(cache.booking_database, id)) {
                 const auto &appointment = cache.booking_database[id];
                 
-                cout << "Your appointment is a " << SERVICES[appointment.service].name << " " << (appointment.service_type == TREATMENT ? "treatment" : "consultation") << " during " << cache.format_booking_time() << endl;
+                cout << "Your appointment is a " << SERVICES[appointment.service].name << " " << (appointment.service_type == TREATMENT ? "treatment" : "consultation") << " during " << format_booking_time(appointment) << endl;
                 cout << "Expert in charge: " << EXPERTS[appointment.expert].name << endl;
                 cout << "Service description: " << SERVICES[appointment.service].description << endl;
             }
