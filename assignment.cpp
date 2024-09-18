@@ -822,9 +822,19 @@ State ui(const State state, bool &validation, Cache &cache)
         ))
             cout << "Our experts:" << endl;
             
-            for (const auto &expert : EXPERTS) {
-                cout << "- " << expert.name << " (" << (expert.gender == MALE ? "Male" : "Female") << ')' << endl;
-            }
+            for (const auto &expert : EXPERTS)
+                cout << "- " << expert.name << " (" << (expert.gender == MALE ? "Male" : "Female") << ") 📞 " << expert.phone_number  << endl;
+            
+            return custom_input<EXPERTS.size(), CUSTOMER_MENU>(
+                state,
+                validation,
+                [](size_t) { return true; },
+                [](size_t i) { cout << "Book an appointment with " << EXPERTS[i].name; },
+                [&](size_t i) {
+                    cache.booking.expert = i;
+                    return BOOKING;
+                }
+            );
             
             break;
             
