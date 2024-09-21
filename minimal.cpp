@@ -152,15 +152,15 @@ const string SHORT_DAYS_OF_A_WEEK[] = {
 };
 
 const Service SERVICES[] = {
-    {"Skin Care", "blablabla", 100, 200},
-    {"Face Makeup", "lorem ipsum", 123, 456},
-    {"Hair Coloring", "foo bar baz", 999, 9999},
+    {"Skin Care", "Helps identify your skin diseases to cure them, help protect or enhance the skin's looks depending on the state of your skin.", 125.00, 225.00},
+    {"Face Makeup", "Enables you to look good and hides your acnes before an event, to help you look the best possible you can be.", 200.00, 450.00},
+    {"Hair Coloring", "Turn your hair into any color you want. With our long lasting dye, you can express yourself for a long time.", 250.00, 500.00},
 };
 
 const User EXPERTS[] = {
-    { "Ang Zi En", FEMALE, "999", "aze", "12345678" },
-    { "Wai Chee Han", MALE, "999", "wch", "12345678" },
-    { "Wilson Ang Shao En", MALE, "+6011-7243 3165", "wase", "12345678" },
+    { "Ang Zi En", FEMALE, "+60 11-1083 7183", "aze", "12345678" },
+    { "Wai Chee Han", MALE, "+60 16-899 2283", "waich", "wch123" },
+    { "Wilson Ang Shao En", MALE, "+60 11-7243 3165", "wase", "051224021039" },
 };
 
 const User ADMIN = { "Administrator", MALE, "-", "admin", "12345678" };
