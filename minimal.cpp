@@ -73,9 +73,6 @@ enum State {
     CUSTOMER_VIEW_NEXT_PAGE,
     
     SALES_REPORT,
-    SALES_REPORT_CUSTOMER_SUMMARY,
-    SALES_REPORT_EXPERT_SUMMARY,
-    SALES_REPORT_FINANCE_SUMMARY,
     
     
     LOGOUT,
@@ -173,7 +170,7 @@ void coutfill(char c, int n) {
         cout << setfill(c) << setw(n) << c;
 }
 
-void line() {
+void print_line() {
     coutfill('-', 20);
     cout << endl;
 }
@@ -545,7 +542,7 @@ void print_schedule(const Cache &cache) {
 }
 
 int input_options(const Option options[], int option_count, bool &validation) {
-    cout << endl;
+    cout << endl << "Please select one of the following options:" << endl;
     
     for (int i = 0; i < option_count; i++)
         cout << i + 1 << ": " << options[i].description << endl;
@@ -580,11 +577,11 @@ int ui(int state, bool &validation, Cache &cache) {
     
     clear();
     cout << "COMPANY LOGO" << endl;
-    line();
+    print_line();
     
     if (!cache.user.username.empty()) {
         cout << "Currently login as " << cache.user.username << " (" << cache.user.name << ")" << endl;
-        line();
+        print_line();
     }
     
     switch (state) {
@@ -711,13 +708,13 @@ int ui(int state, bool &validation, Cache &cache) {
             cache.booking.service = -1;
             
             cout << "Customer services" << endl;
-            line();
+            print_line();
             break;
             
             
         case SERVICE_LIST:
             cout << "Available services" << endl;
-            line();
+            print_line();
             
             {
 				Option options[SERVICE_COUNT + 1] = {};
@@ -751,7 +748,7 @@ int ui(int state, bool &validation, Cache &cache) {
             const Service &service = SERVICES[cache.booking.service];
             
             cout << service.name << " Service (Consultation: RM " << setprecision(2) << fixed << service.consultation_fee << "; Treatment: RM " << service.treatment_fee << ")" << endl;
-            line();
+            print_line();
             cout << service.description << endl;
             
             break;
@@ -998,7 +995,7 @@ int ui(int state, bool &validation, Cache &cache) {
             const User &customer = cache.user;
             
             cout << "Please confirm that the following information are correct" << endl;
-            line();
+            print_line();
             cout << "Name: " << customer.name << endl;
             cout << "Gender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
             cout << "Contact number: " << customer.phone_number << endl << endl;
@@ -1079,7 +1076,18 @@ int ui(int state, bool &validation, Cache &cache) {
             string id;
             Booking appointment;
             
-            cout << "Please enter the appointment id: ";
+            ifstream in;
+            in.open(FILES.BOOKING);
+            
+            cout << "List of appointments:" << endl;
+            
+            while (read_booking(in, id, appointment))
+                if (appointment.customer_username == cache.user.username)
+                    cout << id << endl;
+            
+            in.close();
+            
+            cout << endl << "Please enter the appointment id: ";
             cin >> id;
             cout << endl;
             
@@ -1275,7 +1283,7 @@ int ui(int state, bool &validation, Cache &cache) {
             
             if (cache.customer_count > 0) {
                 cout << "Customers (Page " << cache.customer_view_page + 1 << " of " << (cache.customer_count + CUSTOMER_ENTRIES_PER_PAGE - 1) / CUSTOMER_ENTRIES_PER_PAGE << ')' << endl;
-                line();
+                print_line();
                 
                 int offset = cache.customer_view_page * CUSTOMER_ENTRIES_PER_PAGE;
                 
@@ -1313,78 +1321,76 @@ int ui(int state, bool &validation, Cache &cache) {
             
             
         case SALES_REPORT:
-			static const Option SALES_REPORT_OPTIONS[] = {
-                {"Customer summary", SALES_REPORT_CUSTOMER_SUMMARY},
-                {"Expert summary", SALES_REPORT_EXPERT_SUMMARY},
-                {"Finance summary", SALES_REPORT_FINANCE_SUMMARY},
-            };
+			static const Option SALES_REPORT_OPTIONS[] = {{"Return to main menu", STAFF_MENU}};
 			options = SALES_REPORT_OPTIONS;
 			option_count = sizeof(SALES_REPORT_OPTIONS) / sizeof(Option);
             
-            cout << "Sales report" << endl;
-            break;
-        
-        
-        case SALES_REPORT_CUSTOMER_SUMMARY:
-			static const Option SALES_REPORT_CUSTOMER_SUMMARY_OPTIONS[] = {{"Return to main menu", STAFF_MENU}};
-			options = SALES_REPORT_CUSTOMER_SUMMARY_OPTIONS;
-			option_count = sizeof(SALES_REPORT_CUSTOMER_SUMMARY_OPTIONS) / sizeof(Option);
-            
-            cout << "Sales Report: Customer Summary" << endl;
-            line();
-            
-            if (cache.customer_count > 0) {
-                // todo
+            {
+                cout << "Sales report" << endl;
+                print_line();
                 
-                // const User *most_appointments = nullptr;
-                // const User *most_paid = nullptr;
+                double expert_sales[EXPERT_COUNT] = {};
+                int expert_hours[EXPERT_COUNT] = {};
+                int service_sales[SERVICE_COUNT] = {};
+                int treatment = 0, consultation = 0;
+                double most_sales = 0;
+                int popular_service = 0;
                 
-                // for (const auto &p : cache.customer_database) {
-                //     const auto &customer = p.second;
-                //     const auto &data = *customer.customer_data;
+                ifstream in;
+                string id;
+                Booking booking;
+                
+                in.open(FILES.BOOKING);
+                
+                while (read_booking(in, id, booking)) {
+                    const Service &service = SERVICES[booking.service];
                     
-                //     if (most_appointments == nullptr || most_appointments->customer_data->booking_history.size() < data.booking_history.size())
-                //         most_appointments = &customer;
+                    expert_sales[booking.expert] += booking.service_type == TREATMENT ? service.treatment_fee : service.consultation_fee;
+                    expert_hours[booking.expert] += booking.service_type == TREATMENT ? 2 : 1;
+                    service_sales[booking.service]++;
                     
-                //     if (most_paid == nullptr || most_paid->customer_data->total_payment < data.total_payment)
-                //         most_paid = &customer;
-                // }
+                    if (booking.service_type == TREATMENT)
+                        treatment++;
+                    else
+                        consultation++;
+                    
+                    if (expert_sales[booking.expert] > most_sales)
+                        most_sales = expert_sales[booking.expert];
+                    
+                    if (service_sales[booking.service] > popular_service)
+                        popular_service = service_sales[booking.service];
+                }
                 
-                // cout << "Customer who booked the highest count of appointments: " << most_appointments->name << endl;
-                // print_customer_data(*most_appointments);
+                in.close();
                 
-                // line();
+                cout << "Experts Summary" << endl << endl;
                 
-                // cout << "Customer who paid most for our services: " << most_paid->name << endl;
-                // print_customer_data(*most_paid);
+                for (int expert = 0; expert < EXPERT_COUNT; expert++)
+                    cout << expert + 1 << ". Expert " << EXPERTS[expert].name << " has earned RM " << setprecision(2) << fixed << expert_sales[expert] << " and worked a total of " << expert_hours[expert] << " hours" << endl;
+                
+                cout << endl << "Expert(s) that earned most (RM " << most_sales << "):" << endl;
+                
+                for (int expert = 0; expert < EXPERT_COUNT; expert++)
+                    if (expert_sales[expert] == most_sales)
+                        cout << EXPERTS[expert].name << endl;
+                
+                print_line();
+                
+                cout << "Service Summary" << endl;
+                
+                for (int service = 0; service < SERVICE_COUNT; service++)
+                    cout << service + 1 << ". Service " << SERVICES[service].name << " has been chosen for " << service_sales[service] << " time(s)" << endl;
+                
+                cout << endl << "Most popular service(s) that has been chosen " << popular_service << " time(s):" << endl;
+                
+                for (int service = 0; service < SERVICE_COUNT; service++)
+                    if (service_sales[service] == popular_service)
+                        cout << SERVICES[service].name << endl;
+                
+                cout << endl;
+                cout << "Total treatments: " << treatment << endl;
+                cout << "Total consultations: " << consultation << endl;
             }
-            else
-                cout << "Not enough data" << endl;
-            
-            break;
-            
-        
-        
-        case SALES_REPORT_EXPERT_SUMMARY:
-			static const Option SALES_REPORT_EXPERT_SUMMARY_OPTIONS[] = {{"Return to main menu", STAFF_MENU}};
-			options = SALES_REPORT_EXPERT_SUMMARY_OPTIONS;
-			option_count = sizeof(SALES_REPORT_EXPERT_SUMMARY_OPTIONS) / sizeof(Option);
-        {
-            // todo
-            
-            // constexpr ConstStr HOURS_WORKED = "Hours Worked", TOTAL_SALES = "Total Sales";
-            // constexpr auto MAX_RECORD_NAME_LEN = max(HOURS_WORKED.len, TOTAL_SALES.len);
-            
-            // coutfill<' ', MAX_RECORD_NAME_LEN>();
-            
-            break;
-        }
-        
-        
-        case SALES_REPORT_FINANCE_SUMMARY:
-			static const Option SALES_REPORT_FINANCE_SUMMARY_OPTIONS[] = {{"Return to main menu", STAFF_MENU}};
-			options = SALES_REPORT_FINANCE_SUMMARY_OPTIONS;
-			option_count = sizeof(SALES_REPORT_FINANCE_SUMMARY_OPTIONS) / sizeof(Option);
             break;
         
         

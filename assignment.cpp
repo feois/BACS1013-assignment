@@ -411,7 +411,7 @@ void center(const size_t string_width, F f) {
 //     }
 // }
 
-void line() {
+void print_line() {
     coutfill<'-', 20>();
     cout << endl;
 }
@@ -664,13 +664,13 @@ State ui(const State state, bool &validation, Cache &cache)
     clear();
     
     cout << "COMPANY LOGO" << endl;
-    line();
+    print_line();
     cout << format_time(now) << endl;
-    line();
+    print_line();
     
     if (cache.login_user != nullptr) {
         cout << "Currently login as " << cache.login_user->username << " (" << cache.login_user->name << ")" << endl;
-        line();
+        print_line();
     }
     
     switch (state)
@@ -779,13 +779,13 @@ State ui(const State state, bool &validation, Cache &cache)
             {"Log out", LOGOUT},
         ))
             cout << "Customer services" << endl;
-            line();
+            print_line();
             break;
             
             
         case SERVICE_LIST:
             cout << "Available services" << endl;
-            line();
+            print_line();
             
             cache.booking.service = -1;
             
@@ -809,7 +809,7 @@ State ui(const State state, bool &validation, Cache &cache)
             const auto &service = SERVICES[cache.booking.service];
             
             cout << service.name << " Service (Consultation: RM " << setprecision(2) << fixed << service.consultation_fee << "; Treatment: RM " << service.treatment_fee << ")" << endl;
-            line();
+            print_line();
             cout << service.description << endl;
             
             break;
@@ -1014,7 +1014,7 @@ State ui(const State state, bool &validation, Cache &cache)
             const auto &customer = *cache.login_user;
             
             cout << "Please confirm that the following information are correct" << endl;
-            line();
+            print_line();
             cout << "Name: " << customer.name << endl;
             cout << "Gender: " << (customer.gender == MALE ? "Male" : "Female") << endl;
             cout << "Contact number: " << customer.phone_number << endl << endl;
@@ -1274,7 +1274,7 @@ State ui(const State state, bool &validation, Cache &cache)
         ))
             if (cache.customer_database.size() > 0) {
                 cout << "Customers (Page " << cache.view_page + 1 << " of " << (cache.customer_database.size() + CUSTOMER_ENTRIES_PER_PAGE - 1) / CUSTOMER_ENTRIES_PER_PAGE << ')' << endl;
-                line();
+                print_line();
                 
                 const auto offset = cache.view_page * CUSTOMER_ENTRIES_PER_PAGE;
                 
@@ -1323,7 +1323,7 @@ State ui(const State state, bool &validation, Cache &cache)
         
         opts(SALES_REPORT_CUSTOMER_SUMMARY, (OPT_MAIN_MENU(STAFF_MENU)))
             cout << "Sales Report: Customer Summary" << endl;
-            line();
+            print_line();
             
             if (cache.customer_database.size() > 0) {
                 const User *most_appointments = nullptr;
@@ -1343,7 +1343,7 @@ State ui(const State state, bool &validation, Cache &cache)
                 cout << "Customer who booked the highest count of appointments: " << most_appointments->name << endl;
                 print_customer_data(*most_appointments);
                 
-                line();
+                print_line();
                 
                 cout << "Customer who paid most for our services: " << most_paid->name << endl;
                 print_customer_data(*most_paid);
