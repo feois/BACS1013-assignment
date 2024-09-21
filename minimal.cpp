@@ -507,7 +507,7 @@ void print_schedule(const Cache &cache) {
             for (int hour = 0; hour < WORK_HOUR_COUNT; hour++) {
                 cout << '|';
                 
-                center(CELL_SIZE, 1, cache.schedule[cache.booking.day][hour][expert] ? "✗" : "✓");
+                center(CELL_SIZE, 1, cache.schedule[cache.booking.day][hour][expert] ? "X" : "O");
             }
         }
     }
@@ -534,7 +534,7 @@ void print_schedule(const Cache &cache) {
         for (int hour = 0; hour < WORK_HOUR_COUNT; hour++) {
             cout << '|';
             
-            center(CELL_SIZE, 1, cache.schedule[cache.booking.day][hour][cache.booking.expert] ? "✗" : "✓");
+            center(CELL_SIZE, 1, cache.schedule[cache.booking.day][hour][cache.booking.expert] ? "X" : "O");
         }
     }
     
