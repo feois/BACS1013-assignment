@@ -456,10 +456,34 @@ void print_calendar(const Cache &cache) {
     cout << "T means treatment is available to book" << endl;
 }
 
+void print_booking_status(const Booking &booking, bool is_service_type_selected) {
+    cout << "Booking an appointment";
+    
+    if (booking.expert != -1)
+        cout << " with expert " << EXPERTS[booking.expert].name;
+    
+    if (booking.service != -1) {
+        cout << " of service " << SERVICES[booking.service].name;
+        
+        if (is_service_type_selected)
+            cout << ' ' << (booking.service_type == TREATMENT ? "treatment" : "consultation");
+    }
+    
+    if (booking.day != -1) {
+        cout << " on ";
+        
+        cout << (booking.hour != -1 ? format_booking_time(booking) : format_date(booking.day));
+    }
+    
+    cout << endl;
+}
+
 void print_schedule(const Cache &cache) {
     const int CELL_SIZE = 5;
     
-    cout << "Schedule for " << (cache.booking.expert == -1 ? "all experts" : ("expert " + EXPERTS[cache.booking.expert].name)) << " on " << format_date(cache.booking.day) << endl << endl;
+    print_booking_status(cache.booking, true);
+    
+    cout << endl << "Schedule for " << (cache.booking.expert == -1 ? "all experts" : ("expert " + EXPERTS[cache.booking.expert].name)) << " on " << format_date(cache.booking.day) << endl << endl;
     
     if (cache.booking.expert == -1) {
         const string LABEL = "Experts";
@@ -618,26 +642,27 @@ int ui(int state, bool &validation, Cache &cache) {
                     break;
                 }
                 else {
-                    string response;
+                    char response;
                     
                     cache.user = {};
                     
-                    cout << endl << "This username does not exist. Do you wish to register a new account with this username? (Y/n) ";
+                    cout << endl << "This username does not exist. Do you wish to register a new account with this username? (y/n) ";
                     cin >> response;
+                    cin.ignore();
                     
-                    if (response == "n" || response == "N")
+                    if (response == 'n' || response == 'N')
                         return MAIN_MENU;
-                    else if (response != "y" && response != "Y")
+                    else if (response != 'y' && response != 'Y')
                         break;
                     
                     cout << endl << "Enter your name: ";
-                    cin >> cache.user.name;
+                    getline(cin, cache.user.name);
                     cout << "Enter your gender (M/F): ";
                     cin >> response;
                     
-                    if (response == "m" || response == "M")
+                    if (response == 'm' || response == 'M')
                         cache.user.gender = MALE;
-                    else if (response == "f" || response == "F")
+                    else if (response == 'f' || response == 'F')
                         cache.user.gender = FEMALE;
                     else {
                         cache.user = {};
@@ -680,6 +705,11 @@ int ui(int state, bool &validation, Cache &cache) {
 			options = CUSTOMER_MENU_OPTIONS;
 			option_count = sizeof(CUSTOMER_MENU_OPTIONS) / sizeof(Option);
             
+            cache.booking.day = -1;
+            cache.booking.hour = -1;
+            cache.booking.expert = -1;
+            cache.booking.service = -1;
+            
             cout << "Customer services" << endl;
             line();
             break;
@@ -688,8 +718,6 @@ int ui(int state, bool &validation, Cache &cache) {
         case SERVICE_LIST:
             cout << "Available services" << endl;
             line();
-            
-            cache.booking.service = -1;
             
             {
 				Option options[SERVICE_COUNT + 1] = {};
@@ -733,9 +761,8 @@ int ui(int state, bool &validation, Cache &cache) {
         case EXPERT_LIST:
             cout << "Our experts:" << endl;
             
-            for (const User &expert : EXPERTS) {
+            for (const User &expert : EXPERTS)
                 cout << "- " << expert.name << " (" << (expert.gender == MALE ? "Male" : "Female") << ") 📞 " << expert.phone_number << endl;
-            }
             
             {
 				Option options[EXPERT_COUNT + 1] = {};
@@ -772,15 +799,9 @@ int ui(int state, bool &validation, Cache &cache) {
 			options = BOOKING_OPTIONS;
 			option_count = sizeof(BOOKING_OPTIONS) / sizeof(Option);
             
-            cout << "Booking an appointment";
+            print_booking_status(cache.booking, false);
             
-            if (cache.booking.expert != -1)
-                cout << " with expert " << EXPERTS[cache.booking.expert].name;
-            
-            if (cache.booking.service != -1)
-                cout << " of service " << SERVICES[cache.booking.service].name;
-            
-            cout << endl << endl;
+            cout << endl;
             
             print_calendar(cache);
             break;
@@ -790,15 +811,9 @@ int ui(int state, bool &validation, Cache &cache) {
         {
             string input;
             
-            cout << "Booking an appointment";
+            print_booking_status(cache.booking, false);
             
-            if (cache.booking.expert != -1)
-                cout << " with expert " << EXPERTS[cache.booking.expert].name;
-            
-            if (cache.booking.service != -1)
-                cout << " of service " << SERVICES[cache.booking.service].name;
-            
-            cout << endl << endl;
+            cout << endl;
             
             print_calendar(cache);
             
@@ -817,6 +832,8 @@ int ui(int state, bool &validation, Cache &cache) {
             if (day > 0 && --day < DAY_COUNT) {
                 const bool consultation = check_availability(cache, CONSULTATION, day, -1, cache.booking.expert);
                 const bool treatment = check_availability(cache, TREATMENT, day, -1, cache.booking.expert);
+                
+                cache.booking.day = day;
                 
                 if (consultation && treatment)
                     return BOOK_SELECT_SERVICE_TYPE;
@@ -840,15 +857,8 @@ int ui(int state, bool &validation, Cache &cache) {
 			options = BOOK_SELECT_SERVICE_TYPE_OPTIONS;
 			option_count = sizeof(BOOK_SELECT_SERVICE_TYPE_OPTIONS) / sizeof(Option);
             
-            cout << "Booking an appointment";
+            print_booking_status(cache.booking, false);
             
-            if (cache.booking.expert != -1)
-                cout << " with expert " << EXPERTS[cache.booking.expert].name;
-            
-            if (cache.booking.service != -1)
-                cout << " of service " << SERVICES[cache.booking.service].name;
-            
-            cout << "on " << format_date(cache.booking.day) << endl;
             break;
             
             
@@ -874,7 +884,7 @@ int ui(int state, bool &validation, Cache &cache) {
                 if (response == option_count)
                     return BOOK_CANCEL;
                 
-                validation = check_availability(cache, TREATMENT, cache.booking.day, response, -1);
+                validation = check_availability(cache, TREATMENT, cache.booking.day, response, cache.booking.expert);
                 
                 if (!validation)
                     return state;
@@ -907,7 +917,7 @@ int ui(int state, bool &validation, Cache &cache) {
                 if (response == option_count)
                     return BOOK_CANCEL;
                 
-                validation = check_availability(cache, CONSULTATION, cache.booking.day, response, -1);
+                validation = check_availability(cache, CONSULTATION, cache.booking.day, response, cache.booking.expert);
                 
                 if (!validation)
                     return state;
@@ -919,10 +929,10 @@ int ui(int state, bool &validation, Cache &cache) {
         
         
         case BOOK_SELECT_EXPERT:
-            cout << "Booking a " << (cache.booking.service_type == TREATMENT ? "treatment" : "consultation") << " on " << format_booking_time(cache.booking) << endl;
-            cout << endl << "Select an expert to book" << endl;
-            
-            {
+            if (cache.booking.expert == -1) {
+                print_booking_status(cache.booking, true);
+                
+                cout << endl << "Select an expert to book" << endl;
                 
 				Option options[EXPERT_COUNT + 1] = {};
                 option_count = EXPERT_COUNT;
@@ -946,17 +956,15 @@ int ui(int state, bool &validation, Cache &cache) {
                     return state;
                 
                 cache.booking.expert = response;
-                return BOOK_SELECT_SERVICE;
 			}
+            
+            return BOOK_SELECT_SERVICE;
         
         
         case BOOK_SELECT_SERVICE:
-            if (cache.booking.service != -1)
-                return BOOK_CONFIRM;
-            
-            cout << "Booking a " << (cache.booking.service_type == TREATMENT ? "treatment" : "consultation") << " on " << format_booking_time(cache.booking) << endl;
-            
-            {
+            if (cache.booking.service == -1) {
+                print_booking_status(cache.booking, true);
+                
 				Option options[SERVICE_COUNT + 1] = {};
 				
 				for (const Service &service: SERVICES)
@@ -973,8 +981,9 @@ int ui(int state, bool &validation, Cache &cache) {
                     return BOOK_CANCEL;
 				
                 cache.booking.service = response;
-                return BOOK_CONFIRM;
 			}
+            
+            return BOOK_CONFIRM;
         
             
         case BOOK_CONFIRM:
@@ -1110,13 +1119,12 @@ int ui(int state, bool &validation, Cache &cache) {
             else {
                 bool username_found = false;
                 
-                for (const User &expert : EXPERTS) {
+                for (const User &expert : EXPERTS)
                     if (username == expert.username) {
                         cache.user = expert;
                         username_found = true;
                         break;
                     }
-                }
                 
                 if (!username_found) {
                     cout << endl << "Username not found!" << endl;
