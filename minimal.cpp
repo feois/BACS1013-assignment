@@ -171,7 +171,7 @@ void coutfill(char c, int n) {
 }
 
 void print_line() {
-    coutfill('-', 20);
+    coutfill('-', 40);
     cout << endl;
 }
 
