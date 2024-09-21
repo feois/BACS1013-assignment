@@ -542,17 +542,17 @@ void print_schedule(const Cache &cache) {
 }
 
 int input_options(const Option options[], int option_count, bool &validation) {
+    cout << endl;
+    print_line();
     cout << endl << "Please select one of the following options:" << endl;
     
     for (int i = 0; i < option_count; i++)
         cout << i + 1 << ": " << options[i].description << endl;
     
-    if (!validation) {
+    if (!validation)
         cout << endl << "Please enter valid option!" << endl;
-    }
     
     int response;
-    
     cout << endl << "Enter option: ";
     
     if (cin >> response) {
@@ -643,8 +643,13 @@ int ui(int state, bool &validation, Cache &cache) {
     int option_count = 0;
     
     clear();
-    cout << "COMPANY LOGO" << endl;
-    print_line();
+    cout << 
+R"(        ,-----.                           ,--.            
+,--.,--.|  |) /_  ,---.  ,--,--.,--.,--.,-'  '-.,--. ,--. 
+|  ||  ||  .-.  \| .-. :' ,-.  ||  ||  |'-.  .-' \  '  /  
+'  ''  '|  '--' /\   --.\ '-'  |'  ''  '  |  |    \   '   
+ `----' `------'  `----' `--`--' `----'   `--'  .-'  /    
+                                                `---'     )" << endl;
     
     if (!cache.user.username.empty()) {
         cout << "Currently login as " << cache.user.username << " (" << cache.user.name << ")" << endl;
@@ -664,7 +669,12 @@ int ui(int state, bool &validation, Cache &cache) {
 			options = ABOUT_US_OPTIONS;
 			option_count = sizeof(ABOUT_US_OPTIONS) / sizeof(Option);
             
-            cout << "About Us" << endl;
+            cout << "About Us" << endl << endl;
+            
+            cout << "At uBeauty, we prioritize our customer's needs, and we will help you reach your true beauty potential." << endl << endl;
+            cout << "We offer services such as skin care, face makeup and hair coloring, which will help you achieve your best looks." << endl << endl;
+            cout << "Whether it is for events, dates or just to look better, we will be here to assist you for you to be ready for anything." << endl;
+            
             break;
         
         
@@ -739,8 +749,9 @@ int ui(int state, bool &validation, Cache &cache) {
                     cin >> cache.user.password;
                     
                     cache.user.username = username;
-                    
+                    cache.customer_count++;
                     add_customer(cache.user);
+                    save_cache(cache);
                     
                     return CUSTOMER_MENU;
                 }
