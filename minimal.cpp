@@ -1082,6 +1082,8 @@ int ui(int state, bool &validation, Cache &cache) {
             booking.service = -1;
             booking.expert = -1;
             
+            save_cache(cache);
+            
             break;
         }
         
