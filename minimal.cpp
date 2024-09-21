@@ -571,6 +571,73 @@ int input_options(const Option options[], int option_count, bool &validation) {
     return 0;
 }
 
+const Option MAIN_MENU_OPTIONS[] = {
+    {"About us", ABOUT_US},
+    {"I'm a customer", CUSTOMER_LOGIN},
+    {"I'm a staff", STAFF_LOGIN},
+    {"Exit", EXIT},
+};
+const Option ABOUT_US_OPTIONS[] = {{"Return to main menu", MAIN_MENU}};
+const Option CUSTOMER_LOGIN_OPTIONS[] = {{"Retry", CUSTOMER_LOGIN}, {"Return to main menu", MAIN_MENU}};
+const Option CUSTOMER_MENU_OPTIONS[] = {
+    {"View a list of available services", SERVICE_LIST},
+    {"View a list of available experts", EXPERT_LIST},
+    {"Book service", BOOKING},
+    {"View appointments", APPOINTMENTS},
+    {"Log out", LOGOUT},
+};
+const Option VIEW_SERVICE_OPTIONS[] = {
+    {"Book now", BOOKING},
+    {"Go back to service list", SERVICE_LIST},
+};
+const Option BOOKING_OPTIONS[] = {
+    {"Book a day", BOOK_SELECT_DAY},
+    {"Cancel", CUSTOMER_MENU},
+};
+const Option BOOK_SELECT_SERVICE_TYPE_OPTIONS[] = {
+    {"Book treatment", BOOK_TREATMENT},
+    {"Book consultation", BOOK_CONSULTATION},
+    {"Cancel", BOOK_CANCEL},
+};
+const Option BOOK_CONFIRM_OPTIONS[] = {
+    {"Yes, I am sure that the booking information is indeed what I wanted", BOOK_PAYMENT},
+    {"No, there are mistakes in the booking information", BOOK_CANCEL},
+};
+const Option BOOK_PAYMENT_OPTIONS[] = {
+    {"Credit card", BOOK_SUCCESS},
+    {"EWallet", BOOK_SUCCESS},
+    {"Online banking", BOOK_SUCCESS},
+};
+const Option BOOK_SUCCESS_OPTIONS[] = {{"Return to main menu", CUSTOMER_MENU}};
+const Option APPOINTMENTS_OPTIONS[] = {
+    {"View another appointment", APPOINTMENTS},
+    {"Go back", CUSTOMER_MENU},
+};
+const Option STAFF_LOGIN_OPTIONS[] = {
+    {"Retry", STAFF_LOGIN},
+    {"Return to main menu", MAIN_MENU},
+};
+const Option STAFF_MENU_OPTIONS[] = {
+    {"View treatment schedule", TREATMENT_SCHEDULE},
+    {"View consultation schedule", CONSULTATION_SCHEDULE},
+    {"View customers", CUSTOMER_DETAILS},
+    {"View sales report", SALES_REPORT},
+    {"Log out", LOGOUT},
+};
+const Option SCHEDULE_VIEW_OPTIONS[] = {
+    {"Previous week", SCHEDULE_VIEW_PREV_WEEK},
+    {"Next week", SCHEDULE_VIEW_NEXT_WEEK},
+    {"Return to main menu", STAFF_MENU},
+};
+const Option CUSTOMER_VIEW_OPTIONS[] = {
+    {"Previous page", CUSTOMER_VIEW_PREV_PAGE},
+    {"Next page", CUSTOMER_VIEW_NEXT_PAGE},
+    {"Return to main menu", STAFF_MENU},
+};
+const Option SALES_REPORT_OPTIONS[] = {{"Return to main menu", STAFF_MENU}};
+const Option INVALID_USER_OPTIONS[] = {{"Return to main menu", STAFF_MENU}};
+const Option LOGOUT_OPTIONS[] = {{"Return to main menu", MAIN_MENU}};
+
 int ui(int state, bool &validation, Cache &cache) {
     const Option *options = nullptr;
     int option_count = 0;
@@ -586,12 +653,6 @@ int ui(int state, bool &validation, Cache &cache) {
     
     switch (state) {
         case MAIN_MENU:
-            static const Option MAIN_MENU_OPTIONS[] = {
-                {"About us", ABOUT_US},
-                {"I'm a customer", CUSTOMER_LOGIN},
-                {"I'm a staff", STAFF_LOGIN},
-                {"Exit", EXIT},
-            };
             options = MAIN_MENU_OPTIONS;
             option_count = sizeof(MAIN_MENU_OPTIONS) / sizeof(Option);
             
@@ -600,7 +661,6 @@ int ui(int state, bool &validation, Cache &cache) {
         
         
         case ABOUT_US:
-			static const Option ABOUT_US_OPTIONS[] = {{"Return to main menu", MAIN_MENU}};
 			options = ABOUT_US_OPTIONS;
 			option_count = sizeof(ABOUT_US_OPTIONS) / sizeof(Option);
             
@@ -609,7 +669,6 @@ int ui(int state, bool &validation, Cache &cache) {
         
         
         case CUSTOMER_LOGIN:
-			static const Option CUSTOMER_LOGIN_OPTIONS[] = {{"Retry", CUSTOMER_LOGIN}, {"Return to main menu", MAIN_MENU}};
 			options = CUSTOMER_LOGIN_OPTIONS;
 			option_count = sizeof(CUSTOMER_LOGIN_OPTIONS) / sizeof(Option);
         {
@@ -692,13 +751,6 @@ int ui(int state, bool &validation, Cache &cache) {
             
             
         case CUSTOMER_MENU:
-			static const Option CUSTOMER_MENU_OPTIONS[] = {
-                {"View a list of available services", SERVICE_LIST},
-                {"View a list of available experts", EXPERT_LIST},
-                {"Book service", BOOKING},
-                {"View appointments", APPOINTMENTS},
-                {"Log out", LOGOUT},
-            };
 			options = CUSTOMER_MENU_OPTIONS;
 			option_count = sizeof(CUSTOMER_MENU_OPTIONS) / sizeof(Option);
             
@@ -738,10 +790,6 @@ int ui(int state, bool &validation, Cache &cache) {
             
             
         case VIEW_SERVICE:
-			static const Option VIEW_SERVICE_OPTIONS[] = {
-                {"Book now", BOOKING},
-                {"Go back to service list", SERVICE_LIST},
-            };
 			options = VIEW_SERVICE_OPTIONS;
 			option_count = sizeof(VIEW_SERVICE_OPTIONS) / sizeof(Option);
         {
@@ -789,10 +837,6 @@ int ui(int state, bool &validation, Cache &cache) {
             
             
         case BOOKING:
-			static const Option BOOKING_OPTIONS[] = {
-                {"Book a day", BOOK_SELECT_DAY},
-                {"Cancel", CUSTOMER_MENU},
-            };
 			options = BOOKING_OPTIONS;
 			option_count = sizeof(BOOKING_OPTIONS) / sizeof(Option);
             
@@ -846,11 +890,6 @@ int ui(int state, bool &validation, Cache &cache) {
         
         
         case BOOK_SELECT_SERVICE_TYPE:
-			static const Option BOOK_SELECT_SERVICE_TYPE_OPTIONS[] = {
-                {"Book treatment", BOOK_TREATMENT},
-                {"Book consultation", BOOK_CONSULTATION},
-                {"Cancel", BOOK_CANCEL},
-            };
 			options = BOOK_SELECT_SERVICE_TYPE_OPTIONS;
 			option_count = sizeof(BOOK_SELECT_SERVICE_TYPE_OPTIONS) / sizeof(Option);
             
@@ -984,10 +1023,6 @@ int ui(int state, bool &validation, Cache &cache) {
         
             
         case BOOK_CONFIRM:
-			static const Option BOOK_CONFIRM_OPTIONS[] = {
-                {"Yes, I am sure that the booking information is indeed what I wanted", BOOK_PAYMENT},
-                {"No, there are mistakes in the booking information", BOOK_CANCEL},
-            };
 			options = BOOK_CONFIRM_OPTIONS;
 			option_count = sizeof(BOOK_CONFIRM_OPTIONS) / sizeof(Option);
         {
@@ -1009,11 +1044,6 @@ int ui(int state, bool &validation, Cache &cache) {
         
         
         case BOOK_PAYMENT:
-			static const Option BOOK_PAYMENT_OPTIONS[] = {
-                {"Credit card", BOOK_SUCCESS},
-                {"EWallet", BOOK_SUCCESS},
-                {"Online banking", BOOK_SUCCESS},
-            };
 			options = BOOK_PAYMENT_OPTIONS;
 			option_count = sizeof(BOOK_PAYMENT_OPTIONS) / sizeof(Option);
             
@@ -1022,7 +1052,6 @@ int ui(int state, bool &validation, Cache &cache) {
         
         
         case BOOK_SUCCESS:
-			static const Option BOOK_SUCCESS_OPTIONS[] = {{"Return to main menu", CUSTOMER_MENU}};
 			options = BOOK_SUCCESS_OPTIONS;
 			option_count = sizeof(BOOK_SUCCESS_OPTIONS) / sizeof(Option);
         {
@@ -1066,10 +1095,6 @@ int ui(int state, bool &validation, Cache &cache) {
         
         
         case APPOINTMENTS:
-			static const Option APPOINTMENTS_OPTIONS[] = {
-                {"View another appointment", APPOINTMENTS},
-                {"Go back", CUSTOMER_MENU},
-            };
 			options = APPOINTMENTS_OPTIONS;
 			option_count = sizeof(APPOINTMENTS_OPTIONS) / sizeof(Option);
         {
@@ -1105,10 +1130,6 @@ int ui(int state, bool &validation, Cache &cache) {
         
             
         case STAFF_LOGIN:
-			static const Option STAFF_LOGIN_OPTIONS[] = {
-                {"Retry", STAFF_LOGIN},
-                {"Return to main menu", MAIN_MENU},
-            };
 			options = STAFF_LOGIN_OPTIONS;
 			option_count = sizeof(STAFF_LOGIN_OPTIONS) / sizeof(Option);
         {
@@ -1154,13 +1175,6 @@ int ui(int state, bool &validation, Cache &cache) {
             
             
         case STAFF_MENU:
-			static const Option STAFF_MENU_OPTIONS[] = {
-                {"View treatment schedule", TREATMENT_SCHEDULE},
-                {"View consultation schedule", CONSULTATION_SCHEDULE},
-                {"View customers", CUSTOMER_DETAILS},
-                {"View sales report", SALES_REPORT},
-                {"Log out", LOGOUT},
-            };
 			options = STAFF_MENU_OPTIONS;
 			option_count = sizeof(STAFF_MENU_OPTIONS) / sizeof(Option);
             
@@ -1181,11 +1195,6 @@ int ui(int state, bool &validation, Cache &cache) {
             
         
         case SCHEDULE_VIEW:
-			static const Option SCHEDULE_VIEW_OPTIONS[] = {
-                {"Previous week", SCHEDULE_VIEW_PREV_WEEK},
-                {"Next week", SCHEDULE_VIEW_NEXT_WEEK},
-                {"Return to main menu", STAFF_MENU},
-            };
 			options = SCHEDULE_VIEW_OPTIONS;
 			option_count = sizeof(SCHEDULE_VIEW_OPTIONS) / sizeof(Option);
         {
@@ -1273,11 +1282,6 @@ int ui(int state, bool &validation, Cache &cache) {
         
         
         case CUSTOMER_VIEW:
-			static const Option CUSTOMER_VIEW_OPTIONS[] = {
-                {"Previous page", CUSTOMER_VIEW_PREV_PAGE},
-                {"Next page", CUSTOMER_VIEW_NEXT_PAGE},
-                {"Return to main menu", STAFF_MENU},
-            };
 			options = CUSTOMER_VIEW_OPTIONS;
 			option_count = sizeof(CUSTOMER_VIEW_OPTIONS) / sizeof(Option);
             
@@ -1321,7 +1325,6 @@ int ui(int state, bool &validation, Cache &cache) {
             
             
         case SALES_REPORT:
-			static const Option SALES_REPORT_OPTIONS[] = {{"Return to main menu", STAFF_MENU}};
 			options = SALES_REPORT_OPTIONS;
 			option_count = sizeof(SALES_REPORT_OPTIONS) / sizeof(Option);
             
@@ -1395,7 +1398,6 @@ int ui(int state, bool &validation, Cache &cache) {
         
         
         case INVALID_USER:
-			static const Option INVALID_USER_OPTIONS[] = {{"Return to main menu", STAFF_MENU}};
 			options = INVALID_USER_OPTIONS;
 			option_count = sizeof(INVALID_USER_OPTIONS) / sizeof(Option);
             cout << "Unavailable to this user" << endl;
@@ -1403,7 +1405,6 @@ int ui(int state, bool &validation, Cache &cache) {
             
             
         case LOGOUT:
-			static const Option LOGOUT_OPTIONS[] = {{"Return to main menu", MAIN_MENU}};
 			options = LOGOUT_OPTIONS;
 			option_count = sizeof(LOGOUT_OPTIONS) / sizeof(Option);
             cache.user = {};
