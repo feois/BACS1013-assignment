@@ -438,10 +438,10 @@ void print_calendar(const Cache &cache) {
     cout << endl;
     
     for (int week = 0; week < 5; week++) {
-        for (int day = 0; day < (week == 5 ? 2 : 7); day++) {
+        for (int day = 0; day < (week == 4 ? 2 : 7); day++) {
             cout << setw(2) << week * 7 + day + 1 << ' ';
-            cout << (check_availability(cache, CONSULTATION, day, -1, cache.booking.expert) ? 'C' : '-');
-            cout << (check_availability(cache, TREATMENT, day, -1, cache.booking.expert) ? 'T' : '-');
+            cout << (check_availability(cache, CONSULTATION, week * 7 + day, -1, cache.booking.expert) ? 'C' : '-');
+            cout << (check_availability(cache, TREATMENT, week * 7 + day, -1, cache.booking.expert) ? 'T' : '-');
             cout << ' ';
         }
         
@@ -595,8 +595,8 @@ const Option BOOKING_OPTIONS[] = {
     {"Cancel", CUSTOMER_MENU},
 };
 const Option BOOK_SELECT_SERVICE_TYPE_OPTIONS[] = {
-    {"Book treatment", BOOK_TREATMENT},
-    {"Book consultation", BOOK_CONSULTATION},
+    {"Book treatment (2 hour)", BOOK_TREATMENT},
+    {"Book consultation (1 hour)", BOOK_CONSULTATION},
     {"Cancel", BOOK_CANCEL},
 };
 const Option BOOK_CONFIRM_OPTIONS[] = {
