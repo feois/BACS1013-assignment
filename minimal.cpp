@@ -165,13 +165,13 @@ const User EXPERTS[] = {
 
 const User ADMIN = { "Administrator", MALE, "-", "admin", "12345678" };
 
-void coutfill(char c, int n) {
+void fill_cout(char c, int n) {
     if (n > 0)
         cout << setfill(c) << setw(n) << c;
 }
 
 void print_line() {
-    coutfill('-', 40);
+    fill_cout('-', 40);
     cout << endl;
 }
 
@@ -183,11 +183,11 @@ ostream &center(int target_length, int string_length, const string &s) {
         int left = padding / 2;
         int right = padding - left;
         
-        coutfill(' ', left);
+        fill_cout(' ', left);
         
         cout << s;
         
-        coutfill(' ', right);
+        fill_cout(' ', right);
     }
     
     return cout;
@@ -488,12 +488,12 @@ void print_schedule(const Cache &cache) {
         
         for (int expert = 0; expert < EXPERT_COUNT; expert++) {
             cout << endl;
-            coutfill('-', COLUMN_SIZE);
+            fill_cout('-', COLUMN_SIZE);
             
             for (int hour = 0; hour < WORK_HOUR_COUNT; hour++) {
                 cout << '+';
                 
-                coutfill('-', CELL_SIZE);
+                fill_cout('-', CELL_SIZE);
             }
             
             cout << endl << setfill(' ') << setw(COLUMN_SIZE) << left << EXPERTS[expert].name;
@@ -508,19 +508,19 @@ void print_schedule(const Cache &cache) {
     else {
         string label = "Expert " + EXPERTS[cache.booking.expert].name;
         
-        coutfill(' ', label.length());
+        fill_cout(' ', label.length());
         
         for (int hour = 0; hour < WORK_HOUR_COUNT; hour++)
             cout << '|' << 12 + hour << ":00";
         
         cout << endl;
         
-        coutfill('-', label.length());
+        fill_cout('-', label.length());
         
         for (int hour = 0; hour < WORK_HOUR_COUNT; hour++) {
             cout << '+';
             
-            coutfill('-', CELL_SIZE);
+            fill_cout('-', CELL_SIZE);
         }
         
         cout << endl << label;
@@ -1228,7 +1228,7 @@ int ui(int state, bool &validation, Cache &cache) {
             
             center(LINE_WIDTH, s.length(), s) << endl;
             
-            coutfill(' ', 5);
+            fill_cout(' ', 5);
             
             for (int day = 0; day < day_count; day++) {
                 cout << '|';
@@ -1239,11 +1239,11 @@ int ui(int state, bool &validation, Cache &cache) {
             
             
             for (int hour = 0; hour < WORK_HOUR_COUNT; hour++) {
-                coutfill('-', LABEL_SIZE);
+                fill_cout('-', LABEL_SIZE);
                 
                 for (int j = 0; j < day_count; j++) {
                     cout << '+';
-                    coutfill('-', CELL_SIZE);
+                    fill_cout('-', CELL_SIZE);
                 }
                 
                 cout << endl << OPENING_HOUR + hour << ":00";
