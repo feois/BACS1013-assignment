@@ -811,7 +811,7 @@ int ui(int state, bool &validation, Cache &cache) {
             cout << "Our experts:" << endl;
             
             for (const User &expert : EXPERTS)
-                cout << "- " << expert.name << " (" << (expert.gender == MALE ? "Male" : "Female") << ") 📞 " << expert.phone_number << endl;
+                cout << "- " << expert.name << " (" << (expert.gender == MALE ? "Male" : "Female") << ") Phone number: " << expert.phone_number << endl;
             
             {
 				Option options[EXPERT_COUNT + 1] = {};
@@ -1311,7 +1311,7 @@ int ui(int state, bool &validation, Cache &cache) {
                     read_customer(in, customer);
                 
                 for (int i = 0; i < CUSTOMER_ENTRIES_PER_PAGE && read_customer(in, customer); i++)
-                    cout << offset + i + 1 << ". " << customer.name << " (" << (customer.gender == MALE ? "Male" : "Female") << ") 📞 " << customer.phone_number << endl;
+                    cout << offset + i + 1 << ". " << customer.name << " (" << (customer.gender == MALE ? "Male" : "Female") << ") Phone number: " << customer.phone_number << endl;
                 
                 in.close();
             }
