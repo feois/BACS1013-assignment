@@ -46,7 +46,6 @@ enum State {
     APPOINTMENTS,
     
     BOOKING,
-    BOOK_SELECT_DAY,
     BOOK_SELECT_SERVICE_TYPE,
     BOOK_TREATMENT,
     BOOK_CONSULTATION,
@@ -55,7 +54,6 @@ enum State {
     BOOK_CONFIRM,
     BOOK_PAYMENT,
     BOOK_SUCCESS,
-    BOOK_CANCEL,
     
     
     STAFF_LOGIN,
@@ -584,18 +582,14 @@ const Option VIEW_SERVICE_OPTIONS[] = {
     {"Book now", BOOKING},
     {"Go back to service list", SERVICE_LIST},
 };
-const Option BOOKING_OPTIONS[] = {
-    {"Book a day", BOOK_SELECT_DAY},
-    {"Cancel", CUSTOMER_MENU},
-};
 const Option BOOK_SELECT_SERVICE_TYPE_OPTIONS[] = {
     {"Book treatment (2 hour)", BOOK_TREATMENT},
     {"Book consultation (1 hour)", BOOK_CONSULTATION},
-    {"Cancel", BOOK_CANCEL},
+    {"Cancel", CUSTOMER_MENU},
 };
 const Option BOOK_CONFIRM_OPTIONS[] = {
     {"Yes, I am sure that the booking information is indeed what I wanted", BOOK_PAYMENT},
-    {"No, there are mistakes in the booking information", BOOK_CANCEL},
+    {"No, there are mistakes in the booking information", CUSTOMER_MENU},
 };
 const Option BOOK_PAYMENT_OPTIONS[] = {
     {"Credit card", BOOK_SUCCESS},
@@ -835,18 +829,6 @@ int ui(int state, bool &validation, Cache &cache) {
             
             
         case BOOKING:
-			options = BOOKING_OPTIONS;
-			option_count = sizeof(BOOKING_OPTIONS) / sizeof(Option);
-            
-            print_booking_status(cache.booking, false);
-            
-            cout << endl;
-            
-            print_calendar(cache);
-            break;
-            
-            
-        case BOOK_SELECT_DAY:
         {
             string input;
             
@@ -866,7 +848,7 @@ int ui(int state, bool &validation, Cache &cache) {
             cin >> input;
             
             if (input == "x")
-                return BOOK_CANCEL;
+                return CUSTOMER_MENU;
             
             int day = atoi(input.c_str());
             
@@ -897,7 +879,7 @@ int ui(int state, bool &validation, Cache &cache) {
 					return state;
                 
                 if (response == option_count)
-                    return BOOK_CANCEL;
+                    return CUSTOMER_MENU;
 				
                 cache.booking.service = response;
 			}
@@ -942,7 +924,7 @@ int ui(int state, bool &validation, Cache &cache) {
 					return state;
                 
                 if (response == option_count)
-                    return BOOK_CANCEL;
+                    return CUSTOMER_MENU;
                 
                 validation = check_availability(cache, TREATMENT, cache.booking.day, response, cache.booking.expert);
                 
@@ -975,7 +957,7 @@ int ui(int state, bool &validation, Cache &cache) {
 					return state;
                 
                 if (response == option_count)
-                    return BOOK_CANCEL;
+                    return CUSTOMER_MENU;
                 
                 validation = check_availability(cache, CONSULTATION, cache.booking.day, response, cache.booking.expert);
                 
@@ -1016,7 +998,7 @@ int ui(int state, bool &validation, Cache &cache) {
 					return state;
                 
                 if (response == option_count)
-                    return BOOK_CANCEL;
+                    return CUSTOMER_MENU;
 				
                 validation = check_availability(cache, cache.booking.service_type, cache.booking.day, cache.booking.hour, response);
                 
@@ -1093,14 +1075,6 @@ int ui(int state, bool &validation, Cache &cache) {
             
             break;
         }
-        
-        
-        case BOOK_CANCEL:
-            cache.booking.day = -1;
-            cache.booking.hour = -1;
-            cache.booking.service = -1;
-            cache.booking.expert = -1;
-            return BOOKING;
         
         
         case APPOINTMENTS:
