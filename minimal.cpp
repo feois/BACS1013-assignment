@@ -770,7 +770,6 @@ int ui(int state, bool &validation, Cache &cache) {
             
         case SERVICE_LIST:
             cout << "Available services" << endl;
-            print_line();
             
             {
 				Option options[SERVICE_COUNT + 1] = {};
