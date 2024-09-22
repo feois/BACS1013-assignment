@@ -873,23 +873,47 @@ int ui(int state, bool &validation, Cache &cache) {
             
             int day = atoi(input.c_str());
             
-            if (day > 0 && --day < DAY_COUNT) {
-                const bool consultation = check_availability(cache, CONSULTATION, day, -1, cache.booking.expert);
-                const bool treatment = check_availability(cache, TREATMENT, day, -1, cache.booking.expert);
-                
+            if (day > 0 && --day < DAY_COUNT && check_availability(cache, CONSULTATION, day, -1, cache.booking.expert)) {
                 cache.booking.day = day;
-                
-                if (consultation && treatment)
-                    return BOOK_SELECT_SERVICE_TYPE;
-                else if (consultation)
-                    return BOOK_CONSULTATION;
-                else if (treatment)
-                    return BOOK_TREATMENT;
+                return BOOK_SELECT_SERVICE;
             }
             
             validation = false;
             return state;
         }
+        
+        
+        case BOOK_SELECT_SERVICE:
+            if (cache.booking.service == -1) {
+                print_booking_status(cache.booking, false);
+                
+				Option options[SERVICE_COUNT + 1] = {};
+				
+				for (const Service &service: SERVICES)
+					options[option_count++].description = "Service " + service.name;
+				
+                options[option_count].description = "Cancel";
+                
+				int response = input_options(options, option_count + 1, validation);
+				
+				if (!validation)
+					return state;
+                
+                if (response == option_count)
+                    return BOOK_CANCEL;
+				
+                cache.booking.service = response;
+			}
+            
+            {
+                bool consultation = check_availability(cache, CONSULTATION, cache.booking.day, -1, cache.booking.expert);
+                bool treatment = check_availability(cache, TREATMENT, cache.booking.day, -1, cache.booking.expert);
+                
+                if (consultation && treatment)
+                    return BOOK_SELECT_SERVICE_TYPE;
+                else
+                    return treatment ? BOOK_TREATMENT : BOOK_CONSULTATION;
+            }
         
         
         case BOOK_SELECT_SERVICE_TYPE:
@@ -973,6 +997,14 @@ int ui(int state, bool &validation, Cache &cache) {
                 
                 cout << endl << "Select an expert to book" << endl;
                 
+                print_schedule(cache);
+                
+                cout << endl << "Experts available for " << format_booking_time(cache.booking) << endl;
+                
+                for (int expert = 0; expert < EXPERT_COUNT; expert++)
+                    if (check_availability(cache, cache.booking.service_type, cache.booking.day, cache.booking.hour, expert))
+                        cout << "Expert " << EXPERTS[expert].name << endl;
+                
 				Option options[EXPERT_COUNT + 1] = {};
                 option_count = EXPERT_COUNT;
 				
@@ -995,31 +1027,6 @@ int ui(int state, bool &validation, Cache &cache) {
                     return state;
                 
                 cache.booking.expert = response;
-			}
-            
-            return BOOK_SELECT_SERVICE;
-        
-        
-        case BOOK_SELECT_SERVICE:
-            if (cache.booking.service == -1) {
-                print_booking_status(cache.booking, true);
-                
-				Option options[SERVICE_COUNT + 1] = {};
-				
-				for (const Service &service: SERVICES)
-					options[option_count++].description = "Service " + service.name;
-				
-                options[option_count].description = "Cancel";
-                
-				int response = input_options(options, option_count + 1, validation);
-				
-				if (!validation)
-					return state;
-                
-                if (response == option_count)
-                    return BOOK_CANCEL;
-				
-                cache.booking.service = response;
 			}
             
             return BOOK_CONFIRM;
@@ -1219,15 +1226,15 @@ int ui(int state, bool &validation, Cache &cache) {
             
             const ExpertSchedule &schedule = cache.experts[index];
             
-            const int LABEL_SIZE = 5;
+            const int LABEL_SIZE = 5 + 1 + 5;
             const int CELL_SIZE = 5;
             const int LINE_WIDTH = LABEL_SIZE + 7 * (CELL_SIZE + 1);
             
             string s = format_date(cache.schedule_view_week * 7) + " ~ " + format_date(cache.schedule_view_week * 7 + day_count - 1);
             
-            center(LINE_WIDTH, s.length(), s) << endl;
+            center(LINE_WIDTH, s.length(), s) << endl << endl;
             
-            fill_cout(' ', 5);
+            fill_cout(' ', LABEL_SIZE);
             
             for (int day = 0; day < day_count; day++) {
                 cout << '|';
@@ -1235,7 +1242,6 @@ int ui(int state, bool &validation, Cache &cache) {
             }
             
             cout << endl;
-            
             
             for (int hour = 0; hour < WORK_HOUR_COUNT; hour++) {
                 fill_cout('-', LABEL_SIZE);
@@ -1245,7 +1251,7 @@ int ui(int state, bool &validation, Cache &cache) {
                     fill_cout('-', CELL_SIZE);
                 }
                 
-                cout << endl << OPENING_HOUR + hour << ":00";
+                cout << endl << OPENING_HOUR + hour << ":00~" << OPENING_HOUR + hour + 1 << ":00";
                 
                 for (int day = 0; day < day_count; day++) {
                     const string *id = nullptr;
