@@ -715,7 +715,7 @@ int ui(int state, bool &validation, Cache &cache) {
                     else if (response != 'y' && response != 'Y')
                         break;
                     
-                    cout << endl << "Enter your name: ";
+                    cout << endl << "Enter your name (not username): ";
                     getline(cin, cache.user.name);
                     cout << "Enter your gender (M/F): ";
                     cin >> response;
