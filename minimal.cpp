@@ -765,7 +765,6 @@ int ui(int state, bool &validation, Cache &cache) {
             cache.booking.service = -1;
             
             cout << "Customer services" << endl;
-            print_line();
             break;
             
             
