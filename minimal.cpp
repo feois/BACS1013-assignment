@@ -859,6 +859,8 @@ int ui(int state, bool &validation, Cache &cache) {
             if (!validation)
                 cout << endl << "Please input a valid day!" << endl;
             
+            validation = true;
+            
             cout << endl << "Enter the day to book (x to cancel): ";
             
             cin >> input;
