@@ -267,9 +267,6 @@ int read_int(ifstream &in) {
 
 bool read_customer(ifstream &in, User &customer) {
     if (getline(in, customer.username)) {
-        int gender;
-        string s;
-        
         getline(in, customer.password);
         getline(in, customer.name);
         
@@ -326,10 +323,7 @@ bool read_booking(ifstream &in, string &id, Booking &booking) {
     return false;
 }
 
-void add_booking(const string &id, const Cache &cache) {
-    const User &customer = cache.user;
-    const Booking &booking = cache.booking;
-    
+void add_booking(const string &id, const Booking &booking) {
     ofstream out;
     
     out.open(FILES.BOOKING, ios_base::app);
@@ -550,7 +544,7 @@ int input_options(const Option options[], int option_count, bool &validation) {
         cout << i + 1 << ": " << options[i].description << endl;
     
     if (!validation)
-        cout << endl << "Please enter valid option!" << endl;
+        cout << endl << "Please enter a valid option!" << endl;
     
     int response;
     cout << endl << "Enter option: ";
@@ -1077,7 +1071,7 @@ int ui(int state, bool &validation, Cache &cache) {
             
             booking.customer_username = cache.user.username;
             
-            add_booking(std::move(id), cache);
+            add_booking(id, cache.booking);
             
             for (int i = 0; i < (booking.service_type == TREATMENT ? 2 : 1); i++)
                 cache.schedule[cache.booking.day][cache.booking.hour + i][cache.booking.expert] = true;
@@ -1265,7 +1259,12 @@ int ui(int state, bool &validation, Cache &cache) {
                     if (cache.booking.service_type == TREATMENT && hour > 0 && !day_schedule[hour - 1].empty())
                         id = &day_schedule[hour - 1];
                     
-                    cout << '|' << (id == nullptr ? "  -  " : *id);
+                    cout << '|';
+                    
+                    if (id == nullptr)
+                        center(5, 1, "-");
+                    else
+                        cout << *id;
                 }
                 
                 cout << endl;
