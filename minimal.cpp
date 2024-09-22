@@ -829,11 +829,6 @@ int ui(int state, bool &validation, Cache &cache) {
                 if (response == option_count)
                     return CUSTOMER_MENU;
 				
-                validation = check_availability(cache, CONSULTATION, -1, -1, response);
-                
-                if (!validation)
-                    return state;
-                
                 cache.booking.expert = response;
                 return BOOKING;
 			}
