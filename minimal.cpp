@@ -972,10 +972,6 @@ int ui(int state, bool &validation, Cache &cache) {
         
         case BOOK_SELECT_EXPERT:
             if (cache.booking.expert == -1) {
-                print_booking_status(cache.booking, true);
-                
-                cout << endl << "Select an expert to book" << endl;
-                
                 print_schedule(cache);
                 
                 cout << endl << "Experts available for " << format_booking_time(cache.booking) << endl;
